@@ -3,7 +3,7 @@
  */
 // @flow
 
-import type { AbcTransaction } from 'edge-login'
+import type { EdgeTransaction } from 'edge-login'
 import { currencyInfo } from './currencyInfoETH.js'
 export const DATA_STORE_FOLDER = 'txEngineFolder'
 export const DATA_STORE_FILE = 'walletLocalData.json'
@@ -97,7 +97,7 @@ export class WalletLocalData {
   ethereumAddress: string
   totalBalances: {[currencyCode: string]: string}
   enabledTokens: Array<string>
-  transactionsObj: {[currencyCode: string]: Array<AbcTransaction>}
+  transactionsObj: {[currencyCode: string]: Array<EdgeTransaction>}
   networkFees: EthereumFees
 
   constructor (jsonString: string | null) {
@@ -111,7 +111,7 @@ export class WalletLocalData {
     this.lastAddressQueryHeight = 0
 
     // Dumb extra local var needed to make Flow happy
-    const transactionsObj:{[currencyCode: string]: Array<AbcTransaction>} = {}
+    const transactionsObj:{[currencyCode: string]: Array<EdgeTransaction>} = {}
     this.transactionsObj = transactionsObj
 
     this.networkFees = defaultNetworkFees

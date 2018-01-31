@@ -5,18 +5,18 @@
 
 import { currencyInfo } from './currencyInfoETH.js'
 import type {
-  AbcCurrencyEngine,
-  AbcTransaction,
-  AbcCurrencyEngineCallbacks,
-  AbcCurrencyEngineOptions,
-  AbcSpendInfo,
-  AbcWalletInfo,
-  AbcMetaToken,
-  AbcCurrencyInfo,
-  AbcDenomination,
-  AbcFreshAddress,
-  AbcDataDump,
-  AbcIo
+  EdgeCurrencyEngine,
+  EdgeTransaction,
+  EdgeCurrencyEngineCallbacks,
+  EdgeCurrencyEngineOptions,
+  EdgeSpendInfo,
+  EdgeWalletInfo,
+  EdgeMetaToken,
+  EdgeCurrencyInfo,
+  EdgeDenomination,
+  EdgeFreshAddress,
+  EdgeDataDump,
+  EdgeIo
 } from 'edge-login'
 import { calcMiningFee } from './miningFees.js'
 import { sprintf } from 'sprintf-js'
@@ -88,27 +88,27 @@ class EthereumParams {
 }
 
 class EthereumEngine {
-  walletInfo: AbcWalletInfo
-  abcTxLibCallbacks: AbcCurrencyEngineCallbacks
+  walletInfo: EdgeWalletInfo
+  abcTxLibCallbacks: EdgeCurrencyEngineCallbacks
   walletLocalFolder: any
   engineOn: boolean
   addressesChecked: boolean
   tokenCheckStatus: { [currencyCode: string]: number } // Each currency code can be a 0-1 value
   walletLocalData: WalletLocalData
   walletLocalDataDirty: boolean
-  transactionsChangedArray: Array<AbcTransaction>
-  currencyInfo: AbcCurrencyInfo
-  allTokens: Array<AbcMetaToken>
-  customTokens: Array<AbcMetaToken>
+  transactionsChangedArray: Array<EdgeTransaction>
+  currencyInfo: EdgeCurrencyInfo
+  allTokens: Array<EdgeMetaToken>
+  customTokens: Array<EdgeMetaToken>
   currentSettings: any
   timers: any
   walletId: string
-  io: AbcIo
+  io: EdgeIo
 
-  constructor (io_: any, walletInfo: AbcWalletInfo, opts: AbcCurrencyEngineOptions) {
-    // Validate that we are a valid AbcCurrencyEngine:
+  constructor (io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
+    // Validate that we are a valid EdgeCurrencyEngine:
     // eslint-disable-next-line no-unused-vars
-    const test: AbcCurrencyEngine = this
+    const test: EdgeCurrencyEngine = this
 
     const { walletLocalFolder, callbacks } = opts
 
@@ -262,7 +262,7 @@ class EthereumEngine {
       null
     )
 
-    const abcTransaction:AbcTransaction = {
+    const abcTransaction:EdgeTransaction = {
       txid: tx.hash,
       date: parseInt(tx.timeStamp),
       currencyCode: 'ETH',
@@ -340,7 +340,7 @@ class EthereumEngine {
       null
     )
 
-    const abcTransaction:AbcTransaction = {
+    const abcTransaction:EdgeTransaction = {
       txid: tx.transactionHash,
       date: parseInt(tx.timeStamp),
       currencyCode,
@@ -412,7 +412,7 @@ class EthereumEngine {
       null
     )
 
-    const abcTransaction:AbcTransaction = {
+    const abcTransaction:EdgeTransaction = {
       txid: addHexPrefix(tx.hash),
       date: epochTime,
       currencyCode: 'ETH',
@@ -437,8 +437,8 @@ class EthereumEngine {
       this.transactionsChangedArray = []
     } else {
       // Already have this tx in the database. See if anything changed
-      // const transactionsArray:Array<AbcTransaction> = this.walletLocalData.transactionsObj[ PRIMARY_CURRENCY ]
-      // const abcTx:AbcTransaction = transactionsArray[ idx ]
+      // const transactionsArray:Array<EdgeTransaction> = this.walletLocalData.transactionsObj[ PRIMARY_CURRENCY ]
+      // const abcTx:EdgeTransaction = transactionsArray[ idx ]
       //
       // if (abcTx.blockHeight < tx.block_height || abcTx.date > epochTime) {
       //   this.log(sprintf('processUnconfirmedTransaction: Update transaction: %s height:%s', tx.hash, tx.blockNumber))
@@ -817,11 +817,11 @@ class EthereumEngine {
     })
   }
 
-  sortTxByDate (a: AbcTransaction, b: AbcTransaction) {
+  sortTxByDate (a: EdgeTransaction, b: EdgeTransaction) {
     return b.date - a.date
   }
 
-  addTransaction (currencyCode: string, abcTransaction: AbcTransaction) {
+  addTransaction (currencyCode: string, abcTransaction: EdgeTransaction) {
     // Add or update tx in transactionsObj
     const idx = this.findTransaction(currencyCode, abcTransaction.txid)
 
@@ -841,7 +841,7 @@ class EthereumEngine {
     }
   }
 
-  updateTransaction (currencyCode: string, abcTransaction: AbcTransaction, idx: number) {
+  updateTransaction (currencyCode: string, abcTransaction: EdgeTransaction, idx: number) {
     // Update the transaction
     this.walletLocalData.transactionsObj[currencyCode][idx] = abcTransaction
     this.walletLocalDataDirty = true
@@ -1050,11 +1050,11 @@ class EthereumEngine {
       }
 
       // Create a token object for inclusion in customTokens
-      const denom: AbcDenomination = {
+      const denom: EdgeDenomination = {
         name: ethTokenObj.currencyCode,
         multiplier: ethTokenObj.multiplier
       }
-      const abcMetaToken: AbcMetaToken = {
+      const abcMetaToken: EdgeMetaToken = {
         currencyCode: ethTokenObj.currencyCode,
         currencyName: ethTokenObj.currencyName,
         denominations: [denom],
@@ -1185,7 +1185,7 @@ class EthereumEngine {
   }
 
   // synchronous
-  getFreshAddress (options: any): AbcFreshAddress {
+  getFreshAddress (options: any): EdgeFreshAddress {
     return { publicAddress: this.walletLocalData.ethereumAddress }
   }
 
@@ -1199,7 +1199,7 @@ class EthereumEngine {
   }
 
   // synchronous
-  async makeSpend (abcSpendInfo: AbcSpendInfo) {
+  async makeSpend (abcSpendInfo: EdgeSpendInfo) {
     // Validate the spendInfo
     const valid = validateObject(abcSpendInfo, {
       'type': 'object',
@@ -1338,9 +1338,9 @@ class EthereumEngine {
     // nativeAmount = nativeAmountBN.toString(10)
 
     // **********************************
-    // Create the unsigned AbcTransaction
+    // Create the unsigned EdgeTransaction
 
-    const abcTransaction:AbcTransaction = {
+    const abcTransaction:EdgeTransaction = {
       txid: '', // txid
       date: 0, // date
       currencyCode, // currencyCode
@@ -1356,7 +1356,7 @@ class EthereumEngine {
   }
 
   // asynchronous
-  async signTx (abcTransaction: AbcTransaction): Promise<AbcTransaction> {
+  async signTx (abcTransaction: EdgeTransaction): Promise<EdgeTransaction> {
     // Do signing
 
     const gasLimitHex = toHex(abcTransaction.otherParams.gas)
@@ -1416,7 +1416,7 @@ class EthereumEngine {
   }
 
   // asynchronous
-  async broadcastTx (abcTransaction: AbcTransaction): Promise<AbcTransaction> {
+  async broadcastTx (abcTransaction: EdgeTransaction): Promise<EdgeTransaction> {
     try {
       const transactionParsed = JSON.stringify(abcTransaction, null, 2)
       this.log(`Sent transaction to network:\n${transactionParsed}\n`)
@@ -1470,7 +1470,7 @@ class EthereumEngine {
   }
 
   // asynchronous
-  async saveTx (abcTransaction: AbcTransaction) {
+  async saveTx (abcTransaction: EdgeTransaction) {
     this.addTransaction(abcTransaction.currencyCode, abcTransaction)
 
     this.abcTxLibCallbacks.onTransactionsChanged([abcTransaction])
@@ -1490,8 +1490,8 @@ class EthereumEngine {
     return ''
   }
 
-  dumpData (): AbcDataDump {
-    const dataDump: AbcDataDump = {
+  dumpData (): EdgeDataDump {
+    const dataDump: EdgeDataDump = {
       walletId: this.walletId.split(' - ')[0],
       walletType: this.walletInfo.type,
       pluginType: this.currencyInfo.pluginName,
