@@ -7,8 +7,8 @@ import { currencyInfo } from './currencyInfoETH.js'
 import type {
   AbcCurrencyEngine,
   AbcTransaction,
-  AbcCurrencyPluginCallbacks,
-  AbcMakeEngineOptions,
+  AbcCurrencyEngineCallbacks,
+  AbcCurrencyEngineOptions,
   AbcSpendInfo,
   AbcWalletInfo,
   AbcMetaToken,
@@ -89,7 +89,7 @@ class EthereumParams {
 
 class EthereumEngine {
   walletInfo: AbcWalletInfo
-  abcTxLibCallbacks: AbcCurrencyPluginCallbacks
+  abcTxLibCallbacks: AbcCurrencyEngineCallbacks
   walletLocalFolder: any
   engineOn: boolean
   addressesChecked: boolean
@@ -105,7 +105,7 @@ class EthereumEngine {
   walletId: string
   io: AbcIo
 
-  constructor (io_: any, walletInfo: AbcWalletInfo, opts: AbcMakeEngineOptions) {
+  constructor (io_: any, walletInfo: AbcWalletInfo, opts: AbcCurrencyEngineOptions) {
     // Validate that we are a valid AbcCurrencyEngine:
     // eslint-disable-next-line no-unused-vars
     const test: AbcCurrencyEngine = this

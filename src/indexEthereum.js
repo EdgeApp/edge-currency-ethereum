@@ -7,7 +7,7 @@ import { EthereumEngine } from './currencyEngineETH.js'
 import { DATA_STORE_FILE, DATA_STORE_FOLDER, WalletLocalData } from './ethTypes.js'
 import type {
   AbcCurrencyEngine,
-  AbcMakeEngineOptions,
+  AbcCurrencyEngineOptions,
   AbcParsedUri,
   AbcEncodeUri,
   AbcCurrencyPlugin,
@@ -142,7 +142,7 @@ export const ethereumCurrencyPluginFactory: AbcCurrencyPluginFactory = {
         }
       },
 
-      async makeEngine (walletInfo: AbcWalletInfo, opts: AbcMakeEngineOptions): Promise<AbcCurrencyEngine> {
+      async makeEngine (walletInfo: AbcWalletInfo, opts: AbcCurrencyEngineOptions): Promise<AbcCurrencyEngine> {
         const ethereumEngine = new EthereumEngine(io, walletInfo, opts)
         try {
           const result =
