@@ -1,7 +1,7 @@
 /* global */
 // @flow
 
-import type { AbcCurrencyInfo } from 'edge-login'
+import type { EdgeCurrencyInfo } from 'edge-login'
 import type { EthereumSettings } from './ethTypes'
 
 const otherSettings:EthereumSettings = {
@@ -19,7 +19,7 @@ const defaultSettings:any = {
   otherSettings
 }
 
-export const currencyInfo: AbcCurrencyInfo = {
+export const currencyInfo: EdgeCurrencyInfo = {
   // Basic currency information:
   currencyCode: 'ETH',
   currencyName: 'Ethereum',

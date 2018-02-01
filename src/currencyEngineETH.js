@@ -5,18 +5,18 @@
 
 import { currencyInfo } from './currencyInfoETH.js'
 import type {
-  AbcCurrencyEngine,
-  AbcTransaction,
-  AbcCurrencyPluginCallbacks,
-  AbcMakeEngineOptions,
-  AbcSpendInfo,
-  AbcWalletInfo,
-  AbcMetaToken,
-  AbcCurrencyInfo,
-  AbcDenomination,
-  AbcFreshAddress,
-  AbcDataDump,
-  AbcIo
+  EdgeCurrencyEngine,
+  EdgeTransaction,
+  EdgeCurrencyEngineCallbacks,
+  EdgeCurrencyEngineOptions,
+  EdgeSpendInfo,
+  EdgeWalletInfo,
+  EdgeMetaToken,
+  EdgeCurrencyInfo,
+  EdgeDenomination,
+  EdgeFreshAddress,
+  EdgeDataDump,
+  EdgeIo
 } from 'edge-login'
 import { calcMiningFee } from './miningFees.js'
 import { sprintf } from 'sprintf-js'
@@ -88,27 +88,27 @@ class EthereumParams {
 }
 
 class EthereumEngine {
-  walletInfo: AbcWalletInfo
-  abcTxLibCallbacks: AbcCurrencyPluginCallbacks
+  walletInfo: EdgeWalletInfo
+  edgeTxLibCallbacks: EdgeCurrencyEngineCallbacks
   walletLocalFolder: any
   engineOn: boolean
   addressesChecked: boolean
   tokenCheckStatus: { [currencyCode: string]: number } // Each currency code can be a 0-1 value
   walletLocalData: WalletLocalData
   walletLocalDataDirty: boolean
-  transactionsChangedArray: Array<AbcTransaction>
-  currencyInfo: AbcCurrencyInfo
-  allTokens: Array<AbcMetaToken>
-  customTokens: Array<AbcMetaToken>
+  transactionsChangedArray: Array<EdgeTransaction>
+  currencyInfo: EdgeCurrencyInfo
+  allTokens: Array<EdgeMetaToken>
+  customTokens: Array<EdgeMetaToken>
   currentSettings: any
   timers: any
   walletId: string
-  io: AbcIo
+  io: EdgeIo
 
-  constructor (io_: any, walletInfo: AbcWalletInfo, opts: AbcMakeEngineOptions) {
-    // Validate that we are a valid AbcCurrencyEngine:
+  constructor (io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
+    // Validate that we are a valid EdgeCurrencyEngine:
     // eslint-disable-next-line no-unused-vars
-    const test: AbcCurrencyEngine = this
+    const test: EdgeCurrencyEngine = this
 
     const { walletLocalFolder, callbacks } = opts
 
@@ -134,7 +134,7 @@ class EthereumEngine {
     // Hard coded for testing
     // this.walletInfo.keys.ethereumKey = '389b07b3466eed587d6bdae09a3613611de9add2635432d6cd1521af7bbc3757'
     // this.walletInfo.keys.ethereumAddress = '0x9fa817e5A48DD1adcA7BEc59aa6E3B1F5C4BeA9a'
-    this.abcTxLibCallbacks = callbacks
+    this.edgeTxLibCallbacks = callbacks
     this.walletLocalFolder = walletLocalFolder
 
     // Fix messed-up wallets that have a private key in the wrong place:
@@ -223,7 +223,7 @@ class EthereumEngine {
         if (this.walletLocalData.blockHeight !== blockHeight) {
           this.walletLocalData.blockHeight = blockHeight // Convert to decimal
           this.walletLocalDataDirty = true
-          this.abcTxLibCallbacks.onBlockHeightChanged(this.walletLocalData.blockHeight)
+          this.edgeTxLibCallbacks.onBlockHeightChanged(this.walletLocalData.blockHeight)
         }
       }
     } catch (err) {
@@ -262,7 +262,7 @@ class EthereumEngine {
       null
     )
 
-    const abcTransaction:AbcTransaction = {
+    const edgeTransaction:EdgeTransaction = {
       txid: tx.hash,
       date: parseInt(tx.timeStamp),
       currencyCode: 'ETH',
@@ -279,26 +279,26 @@ class EthereumEngine {
       this.log(sprintf('New transaction: %s', tx.hash))
 
       // New transaction not in database
-      this.addTransaction(PRIMARY_CURRENCY, abcTransaction)
+      this.addTransaction(PRIMARY_CURRENCY, edgeTransaction)
 
-      this.abcTxLibCallbacks.onTransactionsChanged(
+      this.edgeTxLibCallbacks.onTransactionsChanged(
         this.transactionsChangedArray
       )
       this.transactionsChangedArray = []
     } else {
       // Already have this tx in the database. See if anything changed
       const transactionsArray = this.walletLocalData.transactionsObj[ PRIMARY_CURRENCY ]
-      const abcTx = transactionsArray[ idx ]
+      const edgeTx = transactionsArray[ idx ]
 
       if (
-        abcTx.blockHeight !== abcTransaction.blockHeight ||
-        abcTx.networkFee !== abcTransaction.networkFee ||
-        abcTx.nativeAmount !== abcTransaction.nativeAmount ||
-        abcTx.otherParams.errorVal !== abcTransaction.otherParams.errorVal
+        edgeTx.blockHeight !== edgeTransaction.blockHeight ||
+        edgeTx.networkFee !== edgeTransaction.networkFee ||
+        edgeTx.nativeAmount !== edgeTransaction.nativeAmount ||
+        edgeTx.otherParams.errorVal !== edgeTransaction.otherParams.errorVal
       ) {
         this.log(sprintf('Update transaction: %s height:%s', tx.hash, tx.blockNumber))
-        this.updateTransaction(PRIMARY_CURRENCY, abcTransaction, idx)
-        this.abcTxLibCallbacks.onTransactionsChanged(
+        this.updateTransaction(PRIMARY_CURRENCY, edgeTransaction, idx)
+        this.edgeTxLibCallbacks.onTransactionsChanged(
           this.transactionsChangedArray
         )
         this.transactionsChangedArray = []
@@ -340,7 +340,7 @@ class EthereumEngine {
       null
     )
 
-    const abcTransaction:AbcTransaction = {
+    const edgeTransaction:EdgeTransaction = {
       txid: tx.transactionHash,
       date: parseInt(tx.timeStamp),
       currencyCode,
@@ -357,31 +357,31 @@ class EthereumEngine {
       this.log(sprintf('New token transaction: %s', tx.transactionHash))
 
       // New transaction not in database
-      this.addTransaction(currencyCode, abcTransaction)
+      this.addTransaction(currencyCode, edgeTransaction)
 
-      this.abcTxLibCallbacks.onTransactionsChanged(
+      this.edgeTxLibCallbacks.onTransactionsChanged(
         this.transactionsChangedArray
       )
       this.transactionsChangedArray = []
     } else {
       // Already have this tx in the database. See if anything changed
       const transactionsArray = this.walletLocalData.transactionsObj[ currencyCode ]
-      const abcTx = transactionsArray[ idx ]
+      const edgeTx = transactionsArray[ idx ]
 
       if (
-        abcTx.blockHeight !== abcTransaction.blockHeight ||
-        abcTx.networkFee !== abcTransaction.networkFee ||
-        abcTx.nativeAmount !== abcTransaction.nativeAmount ||
-        abcTx.otherParams.errorVal !== abcTransaction.otherParams.errorVal
+        edgeTx.blockHeight !== edgeTransaction.blockHeight ||
+        edgeTx.networkFee !== edgeTransaction.networkFee ||
+        edgeTx.nativeAmount !== edgeTransaction.nativeAmount ||
+        edgeTx.otherParams.errorVal !== edgeTransaction.otherParams.errorVal
       ) {
-        this.log(sprintf('Update token transaction: %s height:%s', abcTx.txid, abcTx.blockHeight))
-        this.updateTransaction(currencyCode, abcTransaction, idx)
-        this.abcTxLibCallbacks.onTransactionsChanged(
+        this.log(sprintf('Update token transaction: %s height:%s', edgeTx.txid, edgeTx.blockHeight))
+        this.updateTransaction(currencyCode, edgeTransaction, idx)
+        this.edgeTxLibCallbacks.onTransactionsChanged(
           this.transactionsChangedArray
         )
         this.transactionsChangedArray = []
       } else {
-        // this.log(sprintf('Old transaction. No Update: %s', abcTx.txid))
+        // this.log(sprintf('Old transaction. No Update: %s', edgeTx.txid))
       }
     }
   }
@@ -412,7 +412,7 @@ class EthereumEngine {
       null
     )
 
-    const abcTransaction:AbcTransaction = {
+    const edgeTransaction:EdgeTransaction = {
       txid: addHexPrefix(tx.hash),
       date: epochTime,
       currencyCode: 'ETH',
@@ -429,21 +429,21 @@ class EthereumEngine {
       this.log(sprintf('processUnconfirmedTransaction: New transaction: %s', tx.hash))
 
       // New transaction not in database
-      this.addTransaction(PRIMARY_CURRENCY, abcTransaction)
+      this.addTransaction(PRIMARY_CURRENCY, edgeTransaction)
 
-      this.abcTxLibCallbacks.onTransactionsChanged(
+      this.edgeTxLibCallbacks.onTransactionsChanged(
         this.transactionsChangedArray
       )
       this.transactionsChangedArray = []
     } else {
       // Already have this tx in the database. See if anything changed
-      // const transactionsArray:Array<AbcTransaction> = this.walletLocalData.transactionsObj[ PRIMARY_CURRENCY ]
-      // const abcTx:AbcTransaction = transactionsArray[ idx ]
+      // const transactionsArray:Array<EdgeTransaction> = this.walletLocalData.transactionsObj[ PRIMARY_CURRENCY ]
+      // const edgeTx:EdgeTransaction = transactionsArray[ idx ]
       //
-      // if (abcTx.blockHeight < tx.block_height || abcTx.date > epochTime) {
+      // if (edgeTx.blockHeight < tx.block_height || edgeTx.date > epochTime) {
       //   this.log(sprintf('processUnconfirmedTransaction: Update transaction: %s height:%s', tx.hash, tx.blockNumber))
-      //   this.updateTransaction(PRIMARY_CURRENCY, abcTransaction, idx)
-      //   this.abcTxLibCallbacks.onTransactionsChanged(
+      //   this.updateTransaction(PRIMARY_CURRENCY, edgeTransaction, idx)
+      //   this.edgeTxLibCallbacks.onTransactionsChanged(
       //     this.transactionsChangedArray
       //   )
       //   this.transactionsChangedArray = []
@@ -476,7 +476,7 @@ class EthereumEngine {
         if (!bns.eq(balance, this.walletLocalData.totalBalances[tk])) {
           this.walletLocalData.totalBalances[tk] = balance
           this.log(tk + ': token Address balance: ' + balance)
-          this.abcTxLibCallbacks.onBalanceChanged(tk, balance)
+          this.edgeTxLibCallbacks.onBalanceChanged(tk, balance)
         }
       } else {
         checkAddressSuccess = false
@@ -589,10 +589,10 @@ class EthereumEngine {
     }
     if (numCompleteStatus === this.walletLocalData.enabledTokens.length) {
       this.addressesChecked = true
-      this.abcTxLibCallbacks.onAddressesChecked(1)
+      this.edgeTxLibCallbacks.onAddressesChecked(1)
       this.walletLocalData.lastAddressQueryHeight = this.walletLocalData.blockHeight
     } else {
-      this.abcTxLibCallbacks.onAddressesChecked(totalStatus)
+      this.edgeTxLibCallbacks.onAddressesChecked(totalStatus)
     }
   }
 
@@ -817,36 +817,36 @@ class EthereumEngine {
     })
   }
 
-  sortTxByDate (a: AbcTransaction, b: AbcTransaction) {
+  sortTxByDate (a: EdgeTransaction, b: EdgeTransaction) {
     return b.date - a.date
   }
 
-  addTransaction (currencyCode: string, abcTransaction: AbcTransaction) {
+  addTransaction (currencyCode: string, edgeTransaction: EdgeTransaction) {
     // Add or update tx in transactionsObj
-    const idx = this.findTransaction(currencyCode, abcTransaction.txid)
+    const idx = this.findTransaction(currencyCode, edgeTransaction.txid)
 
     if (idx === -1) {
-      this.log('addTransaction: adding and sorting:' + abcTransaction.txid)
+      this.log('addTransaction: adding and sorting:' + edgeTransaction.txid)
       if (typeof this.walletLocalData.transactionsObj[currencyCode] === 'undefined') {
         this.walletLocalData.transactionsObj[currencyCode] = []
       }
-      this.walletLocalData.transactionsObj[currencyCode].push(abcTransaction)
+      this.walletLocalData.transactionsObj[currencyCode].push(edgeTransaction)
 
       // Sort
       this.walletLocalData.transactionsObj[currencyCode].sort(this.sortTxByDate)
       this.walletLocalDataDirty = true
-      this.transactionsChangedArray.push(abcTransaction)
+      this.transactionsChangedArray.push(edgeTransaction)
     } else {
-      this.updateTransaction(currencyCode, abcTransaction, idx)
+      this.updateTransaction(currencyCode, edgeTransaction, idx)
     }
   }
 
-  updateTransaction (currencyCode: string, abcTransaction: AbcTransaction, idx: number) {
+  updateTransaction (currencyCode: string, edgeTransaction: EdgeTransaction, idx: number) {
     // Update the transaction
-    this.walletLocalData.transactionsObj[currencyCode][idx] = abcTransaction
+    this.walletLocalData.transactionsObj[currencyCode][idx] = edgeTransaction
     this.walletLocalDataDirty = true
-    this.transactionsChangedArray.push(abcTransaction)
-    this.log('updateTransaction:' + abcTransaction.txid)
+    this.transactionsChangedArray.push(edgeTransaction)
+    this.log('updateTransaction:' + edgeTransaction.txid)
   }
 
   // *************************************
@@ -888,10 +888,10 @@ class EthereumEngine {
   doInitialCallbacks () {
     for (const currencyCode of this.walletLocalData.enabledTokens) {
       try {
-        this.abcTxLibCallbacks.onTransactionsChanged(
+        this.edgeTxLibCallbacks.onTransactionsChanged(
           this.walletLocalData.transactionsObj[currencyCode]
         )
-        this.abcTxLibCallbacks.onBalanceChanged(currencyCode, this.walletLocalData.totalBalances[currencyCode])
+        this.edgeTxLibCallbacks.onBalanceChanged(currencyCode, this.walletLocalData.totalBalances[currencyCode])
       } catch (e) {
         this.log('Error for currencyCode', currencyCode, e)
       }
@@ -1050,20 +1050,20 @@ class EthereumEngine {
       }
 
       // Create a token object for inclusion in customTokens
-      const denom: AbcDenomination = {
+      const denom: EdgeDenomination = {
         name: ethTokenObj.currencyCode,
         multiplier: ethTokenObj.multiplier
       }
-      const abcMetaToken: AbcMetaToken = {
+      const edgeMetaToken: EdgeMetaToken = {
         currencyCode: ethTokenObj.currencyCode,
         currencyName: ethTokenObj.currencyName,
         denominations: [denom],
         contractAddress
       }
 
-      this.customTokens.push(abcMetaToken)
+      this.customTokens.push(edgeMetaToken)
       this.allTokens = this.currencyInfo.metaTokens.concat(this.customTokens)
-      this.enableTokensSync([abcMetaToken.currencyCode])
+      this.enableTokensSync([edgeMetaToken.currencyCode])
     } else {
       throw new Error('Invalid custom token object')
     }
@@ -1185,7 +1185,7 @@ class EthereumEngine {
   }
 
   // synchronous
-  getFreshAddress (options: any): AbcFreshAddress {
+  getFreshAddress (options: any): EdgeFreshAddress {
     return { publicAddress: this.walletLocalData.ethereumAddress }
   }
 
@@ -1199,9 +1199,9 @@ class EthereumEngine {
   }
 
   // synchronous
-  async makeSpend (abcSpendInfo: AbcSpendInfo) {
+  async makeSpend (edgeSpendInfo: EdgeSpendInfo) {
     // Validate the spendInfo
-    const valid = validateObject(abcSpendInfo, {
+    const valid = validateObject(edgeSpendInfo, {
       'type': 'object',
       'properties': {
         'currencyCode': { 'type': 'string' },
@@ -1231,7 +1231,7 @@ class EthereumEngine {
     }
 
     // Ethereum can only have one output
-    if (abcSpendInfo.spendTargets.length !== 1) {
+    if (edgeSpendInfo.spendTargets.length !== 1) {
       throw (new Error('Error: only one output allowed'))
     }
 
@@ -1239,8 +1239,8 @@ class EthereumEngine {
     tokenInfo.contractAddress = ''
 
     let currencyCode:string = ''
-    if (typeof abcSpendInfo.currencyCode === 'string') {
-      currencyCode = abcSpendInfo.currencyCode
+    if (typeof edgeSpendInfo.currencyCode === 'string') {
+      currencyCode = edgeSpendInfo.currencyCode
       if (!this.getTokenStatus(currencyCode)) {
         throw (new Error('Error: Token not supported or enabled'))
       } else if (currencyCode !== 'ETH') {
@@ -1252,17 +1252,17 @@ class EthereumEngine {
     } else {
       currencyCode = 'ETH'
     }
-    abcSpendInfo.currencyCode = currencyCode
+    edgeSpendInfo.currencyCode = currencyCode
 
     // ******************************
     // Get the fee amount
 
     let ethParams = {}
-    const { gasLimit, gasPrice } = calcMiningFee(abcSpendInfo, this.walletLocalData.networkFees)
+    const { gasLimit, gasPrice } = calcMiningFee(edgeSpendInfo, this.walletLocalData.networkFees)
 
     let publicAddress = ''
-    if (typeof abcSpendInfo.spendTargets[0].publicAddress === 'string') {
-      publicAddress = abcSpendInfo.spendTargets[0].publicAddress
+    if (typeof edgeSpendInfo.spendTargets[0].publicAddress === 'string') {
+      publicAddress = edgeSpendInfo.spendTargets[0].publicAddress
     } else {
       throw new Error('No valid spendTarget')
     }
@@ -1298,8 +1298,8 @@ class EthereumEngine {
     }
 
     let nativeAmount = '0'
-    if (typeof abcSpendInfo.spendTargets[0].nativeAmount === 'string') {
-      nativeAmount = abcSpendInfo.spendTargets[0].nativeAmount
+    if (typeof edgeSpendInfo.spendTargets[0].nativeAmount === 'string') {
+      nativeAmount = edgeSpendInfo.spendTargets[0].nativeAmount
     } else {
       throw (new Error('Error: no amount specified'))
     }
@@ -1338,9 +1338,9 @@ class EthereumEngine {
     // nativeAmount = nativeAmountBN.toString(10)
 
     // **********************************
-    // Create the unsigned AbcTransaction
+    // Create the unsigned EdgeTransaction
 
-    const abcTransaction:AbcTransaction = {
+    const edgeTransaction:EdgeTransaction = {
       txid: '', // txid
       date: 0, // date
       currencyCode, // currencyCode
@@ -1352,24 +1352,24 @@ class EthereumEngine {
       otherParams: ethParams // otherParams
     }
 
-    return abcTransaction
+    return edgeTransaction
   }
 
   // asynchronous
-  async signTx (abcTransaction: AbcTransaction): Promise<AbcTransaction> {
+  async signTx (edgeTransaction: EdgeTransaction): Promise<EdgeTransaction> {
     // Do signing
 
-    const gasLimitHex = toHex(abcTransaction.otherParams.gas)
-    const gasPriceHex = toHex(abcTransaction.otherParams.gasPrice)
+    const gasLimitHex = toHex(edgeTransaction.otherParams.gas)
+    const gasPriceHex = toHex(edgeTransaction.otherParams.gasPrice)
     let nativeAmountHex
 
-    // let nativeAmountHex = bns.mul('-1', abcTransaction.nativeAmount, 16)
-    if (abcTransaction.currencyCode === PRIMARY_CURRENCY) {
+    // let nativeAmountHex = bns.mul('-1', edgeTransaction.nativeAmount, 16)
+    if (edgeTransaction.currencyCode === PRIMARY_CURRENCY) {
       // Remove the networkFee from the nativeAmount
-      const nativeAmount = bns.add(abcTransaction.nativeAmount, abcTransaction.networkFee)
+      const nativeAmount = bns.add(edgeTransaction.nativeAmount, edgeTransaction.networkFee)
       nativeAmountHex = bns.mul('-1', nativeAmount, 16)
     } else {
-      nativeAmountHex = bns.mul('-1', abcTransaction.nativeAmount, 16)
+      nativeAmountHex = bns.mul('-1', edgeTransaction.nativeAmount, 16)
     }
 
     // const nonceBN = new BN(this.walletLocalData.nextNonce.toString(10), 10)
@@ -1377,12 +1377,12 @@ class EthereumEngine {
     //
     const nonceHex = toHex(this.walletLocalData.nextNonce)
     let data
-    if (abcTransaction.currencyCode === PRIMARY_CURRENCY) {
+    if (edgeTransaction.currencyCode === PRIMARY_CURRENCY) {
       data = ''
     } else {
       const dataArray = abi.simpleEncode(
         'transfer(address,uint256):(uint256)',
-        abcTransaction.otherParams.tokenRecipientAddress,
+        edgeTransaction.otherParams.tokenRecipientAddress,
         nativeAmountHex
       )
       data = '0x' + Buffer.from(dataArray).toString('hex')
@@ -1393,7 +1393,7 @@ class EthereumEngine {
       nonce: nonceHex,
       gasPrice: gasPriceHex,
       gasLimit: gasLimitHex,
-      to: abcTransaction.otherParams.to[0],
+      to: edgeTransaction.otherParams.to[0],
       value: nativeAmountHex,
       data: data,
       // EIP 155 chainId - mainnet: 1, ropsten: 3
@@ -1408,19 +1408,19 @@ class EthereumEngine {
     const tx = new EthereumTx(txParams)
     tx.sign(privKey)
 
-    abcTransaction.signedTx = bufToHex(tx.serialize())
-    abcTransaction.txid = bufToHex(tx.hash())
-    abcTransaction.date = Date.now() / 1000
+    edgeTransaction.signedTx = bufToHex(tx.serialize())
+    edgeTransaction.txid = bufToHex(tx.hash())
+    edgeTransaction.date = Date.now() / 1000
 
-    return abcTransaction
+    return edgeTransaction
   }
 
   // asynchronous
-  async broadcastTx (abcTransaction: AbcTransaction): Promise<AbcTransaction> {
+  async broadcastTx (edgeTransaction: EdgeTransaction): Promise<EdgeTransaction> {
     try {
-      const transactionParsed = JSON.stringify(abcTransaction, null, 2)
+      const transactionParsed = JSON.stringify(edgeTransaction, null, 2)
       this.log(`Sent transaction to network:\n${transactionParsed}\n`)
-      const url = sprintf('?module=proxy&action=eth_sendRawTransaction&hex=%s', abcTransaction.signedTx)
+      const url = sprintf('?module=proxy&action=eth_sendRawTransaction&hex=%s', edgeTransaction.signedTx)
       const jsonObj = await this.fetchGetEtherscan(url)
 
       // {
@@ -1452,8 +1452,8 @@ class EthereumEngine {
           this.walletLocalData.nextNonce = bns.add(this.walletLocalData.nextNonce, '1')
           this.io.console.warn('Nonce too low. Incrementing to ' + this.walletLocalData.nextNonce.toString())
           // Nonce error. Increment nonce and try again
-          const abcTx = await this.signTx(abcTransaction)
-          return await this.broadcastTx(abcTx)
+          const edgeTx = await this.signTx(edgeTransaction)
+          return await this.broadcastTx(edgeTx)
         } else {
           throw (jsonObj.error)
         }
@@ -1466,14 +1466,14 @@ class EthereumEngine {
     } catch (e) {
       throw (e)
     }
-    return abcTransaction
+    return edgeTransaction
   }
 
   // asynchronous
-  async saveTx (abcTransaction: AbcTransaction) {
-    this.addTransaction(abcTransaction.currencyCode, abcTransaction)
+  async saveTx (edgeTransaction: EdgeTransaction) {
+    this.addTransaction(edgeTransaction.currencyCode, edgeTransaction)
 
-    this.abcTxLibCallbacks.onTransactionsChanged([abcTransaction])
+    this.edgeTxLibCallbacks.onTransactionsChanged([edgeTransaction])
   }
 
   getDisplayPrivateSeed () {
@@ -1490,8 +1490,8 @@ class EthereumEngine {
     return ''
   }
 
-  dumpData (): AbcDataDump {
-    const dataDump: AbcDataDump = {
+  dumpData (): EdgeDataDump {
+    const dataDump: EdgeDataDump = {
       walletId: this.walletId.split(' - ')[0],
       walletType: this.walletInfo.type,
       pluginType: this.currencyInfo.pluginName,

@@ -6,13 +6,13 @@ import { currencyInfo } from './currencyInfoETH.js'
 import { EthereumEngine } from './currencyEngineETH.js'
 import { DATA_STORE_FILE, DATA_STORE_FOLDER, WalletLocalData } from './ethTypes.js'
 import type {
-  AbcCurrencyEngine,
-  AbcMakeEngineOptions,
-  AbcParsedUri,
-  AbcEncodeUri,
-  AbcCurrencyPlugin,
-  AbcCurrencyPluginFactory,
-  AbcWalletInfo
+  EdgeCurrencyEngine,
+  EdgeCurrencyEngineOptions,
+  EdgeParsedUri,
+  EdgeEncodeUri,
+  EdgeCurrencyPlugin,
+  EdgeCurrencyPluginFactory,
+  EdgeWalletInfo
 } from 'edge-login'
 import { parse, serialize } from 'uri-js'
 import { bns } from 'biggystring'
@@ -79,15 +79,15 @@ function getParameterByName (param, url) {
 //   }
 // }
 
-export const ethereumCurrencyPluginFactory: AbcCurrencyPluginFactory = {
+export const ethereumCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
   pluginType: 'currency',
   pluginName: currencyInfo.pluginName,
 
-  async makePlugin (opts: any): Promise<AbcCurrencyPlugin> {
+  async makePlugin (opts: any): Promise<EdgeCurrencyPlugin> {
     io = opts.io
 
     console.log(`Creating Currency Plugin for ethereum`)
-    const ethereumPlugin:AbcCurrencyPlugin = {
+    const ethereumPlugin:EdgeCurrencyPlugin = {
       pluginName: 'ethereum',
       currencyInfo,
 
@@ -108,7 +108,7 @@ export const ethereumCurrencyPluginFactory: AbcCurrencyPluginFactory = {
         }
       },
 
-      derivePublicKey: (walletInfo: AbcWalletInfo) => {
+      derivePublicKey: (walletInfo: EdgeWalletInfo) => {
         const type = walletInfo.type.replace('wallet:', '')
         if (type === 'ethereum') {
           const privKey = hexToBuf(walletInfo.keys.ethereumKey)
@@ -142,7 +142,7 @@ export const ethereumCurrencyPluginFactory: AbcCurrencyPluginFactory = {
         }
       },
 
-      async makeEngine (walletInfo: AbcWalletInfo, opts: AbcMakeEngineOptions): Promise<AbcCurrencyEngine> {
+      async makeEngine (walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions): Promise<EdgeCurrencyEngine> {
         const ethereumEngine = new EthereumEngine(io, walletInfo, opts)
         try {
           const result =
@@ -211,29 +211,29 @@ export const ethereumCurrencyPluginFactory: AbcCurrencyPluginFactory = {
         const label = getParameterByName('label', uri)
         const message = getParameterByName('message', uri)
 
-        const abcParsedUri:AbcParsedUri = {
+        const edgeParsedUri:EdgeParsedUri = {
           publicAddress: address
         }
         if (nativeAmount) {
-          abcParsedUri.nativeAmount = nativeAmount
+          edgeParsedUri.nativeAmount = nativeAmount
         }
         if (currencyCode) {
-          abcParsedUri.currencyCode = currencyCode
+          edgeParsedUri.currencyCode = currencyCode
         }
         if (label || message) {
-          abcParsedUri.metadata = {}
+          edgeParsedUri.metadata = {}
           if (label) {
-            abcParsedUri.metadata.name = label
+            edgeParsedUri.metadata.name = label
           }
           if (message) {
-            abcParsedUri.metadata.message = message
+            edgeParsedUri.metadata.message = message
           }
         }
 
-        return abcParsedUri
+        return edgeParsedUri
       },
 
-      encodeUri: (obj: AbcEncodeUri) => {
+      encodeUri: (obj: EdgeEncodeUri) => {
         if (!obj.publicAddress) {
           throw new Error('InvalidPublicAddressError')
         }
