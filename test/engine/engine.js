@@ -136,6 +136,11 @@ for (const fixture of fixtures) {
             'getTransactions'
           )
           assert.equal(
+            typeof engine.getTxids,
+            'function',
+            'getTxids'
+          )
+          assert.equal(
             typeof engine.getFreshAddress,
             'function',
             'getFreshAddress'
@@ -213,15 +218,16 @@ for (const fixture of fixtures) {
   //   })
   // })
 
-  // describe(`Get Transactions from Wallet type ${WALLET_TYPE}`, function () {
-  //   it('Should get number of transactions from cache', function (done) {
-  //     assert.equal(
-  //       engine.getNumTransactions(),
-  //       TX_AMOUNT,
-  //       `should have ${TX_AMOUNT} tx from cache`
-  //     )
-  //     done()
-  //   })
+  describe(`Get Txids`, function () {
+    it('Should get txids from cache', function (done) {
+      assert.deepEqual(
+        engine.getTxids(),
+        [],
+        `meaningless until wallet test includes txs`
+      )
+      done()
+    })
+  })
 
   //   it('Should get transactions from cache', function (done) {
   //     engine.getTransactions().then(txs => {

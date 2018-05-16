@@ -960,6 +960,8 @@ class EthereumEngine {
         this.edgeTxLibCallbacks.onTransactionsChanged(
           this.walletLocalData.transactionsObj[currencyCode]
         )
+        const txids: Array<string> = this.walletLocalData.transactionsObj[currencyCode].map(tx => tx.txid)
+        this.edgeTxLibCallbacks.onTxidsChanged(txids)
         this.edgeTxLibCallbacks.onBalanceChanged(currencyCode, this.walletLocalData.totalBalances[currencyCode])
       } catch (e) {
         this.log('Error for currencyCode', currencyCode, e)
@@ -1188,6 +1190,15 @@ class EthereumEngine {
     } else {
       return this.walletLocalData.transactionsObj[currencyCode].length
     }
+  }
+
+  getTxids (): Array<string> {
+    const currencyCodes = Object.keys(this.walletLocalData.transactionsObj)
+    const byCurrencyCode = this.walletLocalData.transactionsObj
+
+    return currencyCodes.reduce((result, currencyCode) => {
+      return [...result, ...byCurrencyCode[currencyCode].map(tx => tx.txid)]
+    }, [])
   }
 
   // asynchronous
