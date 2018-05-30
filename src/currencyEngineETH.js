@@ -1,6 +1,3 @@
-/**
- * Created by paul on 7/7/17.
- */
 // @flow
 
 import { currencyInfo } from './currencyInfoETH.js'
@@ -22,14 +19,8 @@ import { calcMiningFee } from './miningFees.js'
 import { sprintf } from 'sprintf-js'
 import { bns } from 'biggystring'
 import { NetworkFeesSchema, CustomTokenSchema, EthGasStationSchema } from './ethSchema.js'
-import {
-  DATA_STORE_FILE,
-  DATA_STORE_FOLDER,
-  WalletLocalData,
-  type EthCustomToken,
-  type EthereumFeesGasPrice,
-  type EthereumFee
-} from './ethTypes.js'
+import { DATA_STORE_FILE, DATA_STORE_FOLDER, WalletLocalData } from './ethTypes.js'
+import type { EthCustomToken, EthereumFeesGasPrice, EthereumFee, TxidsWithTimestamp } from './ethTypes.js'
 import { isHex, normalizeAddress, addHexPrefix, bufToHex, validateObject, toHex } from './ethUtils.js'
 
 const Buffer = require('buffer/').Buffer
@@ -41,7 +32,6 @@ const ADDRESS_POLL_MILLISECONDS = 3000
 const BLOCKHEIGHT_POLL_MILLISECONDS = 5000
 const NETWORKFEES_POLL_MILLISECONDS = (60 * 10 * 1000) // 10 minutes
 const SAVE_DATASTORE_MILLISECONDS = 10000
-// const ADDRESS_QUERY_LOOKBACK_BLOCKS = '8' // ~ 2 minutes
 const ADDRESS_QUERY_LOOKBACK_BLOCKS = (4 * 60 * 24 * 7) // ~ one week
 
 const PRIMARY_CURRENCY = currencyInfo.currencyCode
@@ -67,30 +57,33 @@ function padAddress (address: string): string {
 }
 
 class EthereumParams {
+  cumulativeGasUsed: string
+  errorVal: number
   from: Array<string>
-  to: Array<string>
   gas: string
   gasPrice: string
   gasUsed: string
-  cumulativeGasUsed: string
-  errorVal: number
+  to: Array<string>
   tokenRecipientAddress: string | null
 
-  constructor (from: Array<string>,
+  constructor (
+    from: Array<string>,
     to: Array<string>,
     gas: string,
     gasPrice: string,
     gasUsed: string,
     cumulativeGasUsed: string,
     errorVal: number,
-    tokenRecipientAddress: string | null) {
+    tokenRecipientAddress: string | null
+  ) {
+    this.cumulativeGasUsed = cumulativeGasUsed
+    this.errorVal = errorVal
     this.from = from
-    this.to = to
     this.gas = gas
     this.gasPrice = gasPrice
     this.gasUsed = gasUsed
-    this.errorVal = errorVal
-    this.cumulativeGasUsed = cumulativeGasUsed
+    this.to = to
+
     if (typeof tokenRecipientAddress === 'string') {
       this.tokenRecipientAddress = tokenRecipientAddress
     } else {
@@ -100,54 +93,47 @@ class EthereumParams {
 }
 
 class EthereumEngine {
-  walletInfo: EdgeWalletInfo
-  edgeTxLibCallbacks: EdgeCurrencyEngineCallbacks
-  walletLocalFolder: any
-  engineOn: boolean
   addressesChecked: boolean
+  allTokens: Array<EdgeMetaToken>
+  currencyInfo: EdgeCurrencyInfo
+  currentSettings: any
+  customTokens: Array<EdgeMetaToken>
+  edgeTxLibCallbacks: EdgeCurrencyEngineCallbacks
+  engineOn: boolean
+  io: EdgeIo
+  timers: any
   tokenCheckStatus: { [currencyCode: string]: number } // Each currency code can be a 0-1 value
+  transactionsChangedArray: Array<EdgeTransaction>
+  walletId: string
+  walletInfo: EdgeWalletInfo
   walletLocalData: WalletLocalData
   walletLocalDataDirty: boolean
-  transactionsChangedArray: Array<EdgeTransaction>
-  currencyInfo: EdgeCurrencyInfo
-  allTokens: Array<EdgeMetaToken>
-  customTokens: Array<EdgeMetaToken>
-  currentSettings: any
-  timers: any
-  walletId: string
-  io: EdgeIo
+  walletLocalFolder: any
 
   constructor (io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
     // Validate that we are a valid EdgeCurrencyEngine:
     // eslint-disable-next-line no-unused-vars
     const test: EdgeCurrencyEngine = this
 
-    const { walletLocalFolder, callbacks } = opts
-
-    this.io = io_
-    this.engineOn = false
     this.addressesChecked = false
-    this.tokenCheckStatus = {}
-    this.walletLocalDataDirty = false
-    this.transactionsChangedArray = []
-    this.walletInfo = walletInfo
-    this.walletId = walletInfo.id ? `${walletInfo.id} - ` : ''
-    this.currencyInfo = currencyInfo
     this.allTokens = currencyInfo.metaTokens.slice(0)
+    this.currencyInfo = currencyInfo
+    this.currentSettings = opts.optionalSettings || this.currencyInfo.defaultSettings
     this.customTokens = []
+    this.edgeTxLibCallbacks = opts.callbacks
+    this.engineOn = false
+    this.io = io_
     this.timers = {}
-
-    if (typeof opts.optionalSettings !== 'undefined') {
-      this.currentSettings = opts.optionalSettings
-    } else {
-      this.currentSettings = this.currencyInfo.defaultSettings
-    }
+    this.tokenCheckStatus = {}
+    this.transactionsChangedArray = []
+    this.walletId = walletInfo.id ? `${walletInfo.id} - ` : ''
+    this.walletInfo = walletInfo
+    this.walletLocalDataDirty = false
+    this.walletLocalFolder = opts.walletLocalFolder
 
     // Hard coded for testing
     // this.walletInfo.keys.ethereumKey = '389b07b3466eed587d6bdae09a3613611de9add2635432d6cd1521af7bbc3757'
     // this.walletInfo.keys.ethereumAddress = '0x9fa817e5A48DD1adcA7BEc59aa6E3B1F5C4BeA9a'
-    this.edgeTxLibCallbacks = callbacks
-    this.walletLocalFolder = walletLocalFolder
 
     // Fix messed-up wallets that have a private key in the wrong place:
     if (typeof this.walletInfo.keys.ethereumKey !== 'string') {
@@ -290,9 +276,8 @@ class EthereumEngine {
       // New transaction not in database
       this.addTransaction(PRIMARY_CURRENCY, edgeTransaction)
 
-      this.edgeTxLibCallbacks.onTransactionsChanged(
-        this.transactionsChangedArray
-      )
+      this.edgeTxLibCallbacks.onTxidsChanged(this.getTxids(edgeTransaction.currencyCode))
+      this.edgeTxLibCallbacks.onTransactionsChanged(this.transactionsChangedArray)
       this.transactionsChangedArray = []
     } else {
       // Already have this tx in the database. See if anything changed
@@ -307,13 +292,10 @@ class EthereumEngine {
       ) {
         this.log(sprintf('Update transaction: %s height:%s', tx.hash, tx.blockNumber))
         this.updateTransaction(PRIMARY_CURRENCY, edgeTransaction, idx)
-        this.edgeTxLibCallbacks.onTransactionsChanged(
-          this.transactionsChangedArray
-        )
+        this.edgeTxLibCallbacks.onTxidsChanged(this.getTxids(edgeTransaction.currencyCode))
+        this.edgeTxLibCallbacks.onTransactionsChanged(this.transactionsChangedArray)
         this.transactionsChangedArray = []
-      } else {
-        // this.log(sprintf('Old transaction. No Update: %s', tx.hash))
-      }
+      } else {}
     }
   }
 
@@ -321,7 +303,6 @@ class EthereumEngine {
     let netNativeAmount:string // Amount received into wallet
     const ourReceiveAddresses:Array<string> = []
 
-    // const nativeValueBN = new BN(tx.value, 10)
     const paddedAddress = padAddress(this.walletLocalData.ethereumAddress)
     let fromAddress
     let toAddress
@@ -372,9 +353,8 @@ class EthereumEngine {
       // New transaction not in database
       this.addTransaction(currencyCode, edgeTransaction)
 
-      this.edgeTxLibCallbacks.onTransactionsChanged(
-        this.transactionsChangedArray
-      )
+      this.edgeTxLibCallbacks.onTxidsChanged(this.getTxids(currencyCode))
+      this.edgeTxLibCallbacks.onTransactionsChanged(this.transactionsChangedArray)
       this.transactionsChangedArray = []
     } else {
       // Already have this tx in the database. See if anything changed
@@ -385,17 +365,15 @@ class EthereumEngine {
         edgeTx.blockHeight !== edgeTransaction.blockHeight ||
         edgeTx.networkFee !== edgeTransaction.networkFee ||
         edgeTx.nativeAmount !== edgeTransaction.nativeAmount ||
+        edgeTx.date !== edgeTransaction.date ||
         edgeTx.otherParams.errorVal !== edgeTransaction.otherParams.errorVal
       ) {
         this.log(sprintf('Update token transaction: %s height:%s', edgeTx.txid, edgeTx.blockHeight))
         this.updateTransaction(currencyCode, edgeTransaction, idx)
-        this.edgeTxLibCallbacks.onTransactionsChanged(
-          this.transactionsChangedArray
-        )
+        this.edgeTxLibCallbacks.onTxidsChanged(this.getTxids(currencyCode))
+        this.edgeTxLibCallbacks.onTransactionsChanged(this.transactionsChangedArray)
         this.transactionsChangedArray = []
-      } else {
-        // this.log(sprintf('Old transaction. No Update: %s', edgeTx.txid))
-      }
+      } else {}
     }
   }
 
@@ -444,26 +422,10 @@ class EthereumEngine {
       // New transaction not in database
       this.addTransaction(PRIMARY_CURRENCY, edgeTransaction)
 
-      this.edgeTxLibCallbacks.onTransactionsChanged(
-        this.transactionsChangedArray
-      )
+      this.edgeTxLibCallbacks.onTxidsChanged(this.getTxids(edgeTransaction.currencyCode))
+      this.edgeTxLibCallbacks.onTransactionsChanged(this.transactionsChangedArray)
       this.transactionsChangedArray = []
-    } else {
-      // Already have this tx in the database. See if anything changed
-      // const transactionsArray:Array<EdgeTransaction> = this.walletLocalData.transactionsObj[ PRIMARY_CURRENCY ]
-      // const edgeTx:EdgeTransaction = transactionsArray[ idx ]
-      //
-      // if (edgeTx.blockHeight < tx.block_height || edgeTx.date > epochTime) {
-      //   this.log(sprintf('processUnconfirmedTransaction: Update transaction: %s height:%s', tx.hash, tx.blockNumber))
-      //   this.updateTransaction(PRIMARY_CURRENCY, edgeTransaction, idx)
-      //   this.edgeTxLibCallbacks.onTransactionsChanged(
-      //     this.transactionsChangedArray
-      //   )
-      //   this.transactionsChangedArray = []
-      // } else {
-      // this.log(sprintf('processUnconfirmedTransaction: Old transaction. No Update: %s', tx.hash))
-      // }
-    }
+    } else {}
   }
 
   async checkAddressFetch (tk: string, url: string) {
@@ -957,10 +919,12 @@ class EthereumEngine {
   doInitialCallbacks () {
     for (const currencyCode of this.walletLocalData.enabledTokens) {
       try {
-        this.edgeTxLibCallbacks.onTransactionsChanged(
-          this.walletLocalData.transactionsObj[currencyCode]
-        )
+        const txidsWithTimestamps: TxidsWithTimestamp = (this.walletLocalData.transactionsObj[currencyCode] || [])
+          .reduce((result, tx) => ({ ...result, [tx.txid]: tx.date }), {})
+
+        this.edgeTxLibCallbacks.onTransactionsChanged(this.walletLocalData.transactionsObj[currencyCode])
         this.edgeTxLibCallbacks.onBalanceChanged(currencyCode, this.walletLocalData.totalBalances[currencyCode])
+        this.edgeTxLibCallbacks.onTxidsChanged(txidsWithTimestamps)
       } catch (e) {
         this.log('Error for currencyCode', currencyCode, e)
       }
@@ -1190,6 +1154,18 @@ class EthereumEngine {
     }
   }
 
+  getTxids (currencyCode: string): TxidsWithTimestamp {
+    const txids = (this.walletLocalData.transactionsObj[currencyCode] || [])
+      .reduce((result, tx) => {
+        return {
+          ...result,
+          [tx.txid]: tx.date
+        }
+      }, {})
+
+    return txids
+  }
+
   // asynchronous
   async getTransactions (options: any) {
     let currencyCode:string = PRIMARY_CURRENCY
@@ -1379,12 +1355,6 @@ class EthereumEngine {
     InsufficientFundsEthError.name = 'ErrorInsufficientFundsMoreEth'
 
     // Check for insufficient funds
-    // let nativeAmountBN = new BN(nativeAmount, 10)
-    // const gasPriceBN = new BN(gasPrice, 10)
-    // const gasLimitBN = new BN(gasLimit, 10)
-    // const nativeNetworkFeeBN = gasPriceBN.mul(gasLimitBN)
-    // const balanceEthBN = new BN(this.walletLocalData.totalBalances.ETH, 10)
-
     const balanceEth = this.walletLocalData.totalBalances.ETH
     let nativeNetworkFee = bns.mul(gasPrice, gasLimit)
     let totalTxAmount = '0'
@@ -1410,10 +1380,6 @@ class EthereumEngine {
       }
       nativeAmount = bns.mul(nativeAmount, '-1')
     }
-
-    // const negativeOneBN = new BN('-1', 10)
-    // nativeAmountBN.imul(negativeOneBN)
-    // nativeAmount = nativeAmountBN.toString(10)
 
     // **********************************
     // Create the unsigned EdgeTransaction
@@ -1445,7 +1411,6 @@ class EthereumEngine {
     const gasPriceHex = toHex(edgeTransaction.otherParams.gasPrice)
     let nativeAmountHex
 
-    // let nativeAmountHex = bns.mul('-1', edgeTransaction.nativeAmount, 16)
     if (edgeTransaction.currencyCode === PRIMARY_CURRENCY) {
       // Remove the networkFee from the nativeAmount
       const nativeAmount = bns.add(edgeTransaction.nativeAmount, edgeTransaction.networkFee)
@@ -1454,9 +1419,6 @@ class EthereumEngine {
       nativeAmountHex = bns.mul('-1', edgeTransaction.nativeAmount, 16)
     }
 
-    // const nonceBN = new BN(this.walletLocalData.nextNonce.toString(10), 10)
-    // const nonceHex = '0x' + nonceBN.toString(16)
-    //
     const nonceHex = toHex(this.walletLocalData.nextNonce)
     let data
     if (edgeTransaction.currencyCode === PRIMARY_CURRENCY) {
@@ -1478,7 +1440,6 @@ class EthereumEngine {
       to: edgeTransaction.otherParams.to[0],
       value: nativeAmountHex,
       data: data,
-      // EIP 155 chainId - mainnet: 1, ropsten: 3
       chainId: 1
     }
 
@@ -1662,6 +1623,7 @@ class EthereumEngine {
   async saveTx (edgeTransaction: EdgeTransaction) {
     this.addTransaction(edgeTransaction.currencyCode, edgeTransaction)
 
+    this.edgeTxLibCallbacks.onTxidsChanged(this.getTxids(edgeTransaction.currencyCode))
     this.edgeTxLibCallbacks.onTransactionsChanged([edgeTransaction])
   }
 
