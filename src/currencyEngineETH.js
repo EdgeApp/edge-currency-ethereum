@@ -269,14 +269,16 @@ class EthereumEngine {
       otherParams: ethParams
     }
 
+    const { currencyCode, date, txid } = edgeTransaction
     const idx = this.findTransaction(PRIMARY_CURRENCY, tx.hash)
     if (idx === -1) {
       this.log(sprintf('New transaction: %s', tx.hash))
 
       // New transaction not in database
       this.addTransaction(PRIMARY_CURRENCY, edgeTransaction)
+      this.walletLocalData.txids[currencyCode][txid] = date
 
-      this.edgeTxLibCallbacks.onTxidsChanged(this.getTxids(edgeTransaction.currencyCode))
+      this.edgeTxLibCallbacks.onTxidsChanged(this.getTxids(currencyCode))
       this.edgeTxLibCallbacks.onTransactionsChanged(this.transactionsChangedArray)
       this.transactionsChangedArray = []
     } else {
@@ -292,7 +294,9 @@ class EthereumEngine {
       ) {
         this.log(sprintf('Update transaction: %s height:%s', tx.hash, tx.blockNumber))
         this.updateTransaction(PRIMARY_CURRENCY, edgeTransaction, idx)
-        this.edgeTxLibCallbacks.onTxidsChanged(this.getTxids(edgeTransaction.currencyCode))
+        this.walletLocalData.txids[currencyCode][txid] = date
+
+        this.edgeTxLibCallbacks.onTxidsChanged(this.getTxids(currencyCode))
         this.edgeTxLibCallbacks.onTransactionsChanged(this.transactionsChangedArray)
         this.transactionsChangedArray = []
       } else {}
@@ -346,12 +350,14 @@ class EthereumEngine {
       otherParams: ethParams
     }
 
+    const { date, txid } = edgeTransaction
     const idx = this.findTransaction(currencyCode, tx.transactionHash)
     if (idx === -1) {
       this.log(sprintf('New token transaction: %s', tx.transactionHash))
 
       // New transaction not in database
       this.addTransaction(currencyCode, edgeTransaction)
+      this.walletLocalData.txids[currencyCode][txid] = date
 
       this.edgeTxLibCallbacks.onTxidsChanged(this.getTxids(currencyCode))
       this.edgeTxLibCallbacks.onTransactionsChanged(this.transactionsChangedArray)
@@ -370,6 +376,8 @@ class EthereumEngine {
       ) {
         this.log(sprintf('Update token transaction: %s height:%s', edgeTx.txid, edgeTx.blockHeight))
         this.updateTransaction(currencyCode, edgeTransaction, idx)
+        this.walletLocalData.txids[currencyCode][txid] = date
+
         this.edgeTxLibCallbacks.onTxidsChanged(this.getTxids(currencyCode))
         this.edgeTxLibCallbacks.onTransactionsChanged(this.transactionsChangedArray)
         this.transactionsChangedArray = []
@@ -415,14 +423,16 @@ class EthereumEngine {
       otherParams: ethParams
     }
 
+    const { currencyCode, date, txid } = edgeTransaction
     const idx = this.findTransaction(PRIMARY_CURRENCY, tx.hash)
     if (idx === -1) {
       this.log(sprintf('processUnconfirmedTransaction: New transaction: %s', tx.hash))
 
       // New transaction not in database
       this.addTransaction(PRIMARY_CURRENCY, edgeTransaction)
+      this.walletLocalData.txids[currencyCode][txid] = date
 
-      this.edgeTxLibCallbacks.onTxidsChanged(this.getTxids(edgeTransaction.currencyCode))
+      this.edgeTxLibCallbacks.onTxidsChanged(this.getTxids(currencyCode))
       this.edgeTxLibCallbacks.onTransactionsChanged(this.transactionsChangedArray)
       this.transactionsChangedArray = []
     } else {}
@@ -919,12 +929,9 @@ class EthereumEngine {
   doInitialCallbacks () {
     for (const currencyCode of this.walletLocalData.enabledTokens) {
       try {
-        const txidsWithTimestamps: TxidsWithTimestamp = (this.walletLocalData.transactionsObj[currencyCode] || [])
-          .reduce((result, tx) => ({ ...result, [tx.txid]: tx.date }), {})
-
         this.edgeTxLibCallbacks.onTransactionsChanged(this.walletLocalData.transactionsObj[currencyCode])
         this.edgeTxLibCallbacks.onBalanceChanged(currencyCode, this.walletLocalData.totalBalances[currencyCode])
-        this.edgeTxLibCallbacks.onTxidsChanged(txidsWithTimestamps)
+        this.edgeTxLibCallbacks.onTxidsChanged(this.getTxids(currencyCode))
       } catch (e) {
         this.log('Error for currencyCode', currencyCode, e)
       }
@@ -1155,15 +1162,18 @@ class EthereumEngine {
   }
 
   getTxids (currencyCode: string): TxidsWithTimestamp {
-    const txids = (this.walletLocalData.transactionsObj[currencyCode] || [])
-      .reduce((result, tx) => {
-        return {
-          ...result,
-          [tx.txid]: tx.date
-        }
-      }, {})
+    return this.walletLocalData.txids[currencyCode]
+  }
 
-    return txids
+  deriveTxidsWithTimestamps (transactions: Array<EdgeTransaction>) {
+    const txidsWithTimestamps = transactions.reduce((result, tx) => {
+      return {
+        ...result,
+        [tx.txid]: tx.date
+      }
+    }, {})
+
+    return txidsWithTimestamps
   }
 
   // asynchronous
@@ -1621,9 +1631,11 @@ class EthereumEngine {
 
   // asynchronous
   async saveTx (edgeTransaction: EdgeTransaction) {
-    this.addTransaction(edgeTransaction.currencyCode, edgeTransaction)
+    const { currencyCode, date, txid } = edgeTransaction
+    this.addTransaction(currencyCode, edgeTransaction)
+    this.walletLocalData.txids[currencyCode][txid] = date
 
-    this.edgeTxLibCallbacks.onTxidsChanged(this.getTxids(edgeTransaction.currencyCode))
+    this.edgeTxLibCallbacks.onTxidsChanged(this.getTxids(currencyCode))
     this.edgeTxLibCallbacks.onTransactionsChanged([edgeTransaction])
   }
 

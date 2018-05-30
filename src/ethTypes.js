@@ -100,6 +100,7 @@ export class WalletLocalData {
   nextNonce: string
   totalBalances: {[currencyCode: string]: string}
   transactionsObj: {[currencyCode: string]: Array<EdgeTransaction>}
+  txids: {[currencyCode: string]: {[id: string]: number}}
 
   constructor (jsonString: string | null) {
     this.blockHeight = 0
@@ -110,6 +111,7 @@ export class WalletLocalData {
     this.nextNonce = '0'
     this.totalBalances = {}
     this.transactionsObj = {}
+    this.txids = {}
 
     if (jsonString !== null) {
       const data = JSON.parse(jsonString)
@@ -122,6 +124,7 @@ export class WalletLocalData {
       if (typeof data.nextNonce === 'string') this.nextNonce = data.nextNonce
       if (typeof data.totalBalances !== 'undefined') this.totalBalances = data.totalBalances
       if (typeof data.transactionsObj !== 'undefined') this.transactionsObj = data.transactionsObj
+      if (typeof data.txids !== 'undefined') this.txids = data.txids
     }
   }
 }
