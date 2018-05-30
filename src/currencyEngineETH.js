@@ -1161,19 +1161,9 @@ class EthereumEngine {
     }
   }
 
+  // synchronous
   getTxids (currencyCode: string): TxidsWithTimestamp {
-    return this.walletLocalData.txids[currencyCode]
-  }
-
-  deriveTxidsWithTimestamps (transactions: Array<EdgeTransaction>) {
-    const txidsWithTimestamps = transactions.reduce((result, tx) => {
-      return {
-        ...result,
-        [tx.txid]: tx.date
-      }
-    }, {})
-
-    return txidsWithTimestamps
+    return this.walletLocalData.txids[currencyCode] || {}
   }
 
   // asynchronous
