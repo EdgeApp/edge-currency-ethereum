@@ -1,31 +1,47 @@
-/**
- * Created by paul on 8/26/17.
- * @flow
- */
+// @flow
 
-import type { EthereumFees, EthereumFee, EthereumCalcedFees } from './ethTypes.js'
-import type { EdgeSpendInfo } from 'edge-core-js'
-import { normalizeAddress } from './ethUtils.js'
 import { bns } from 'biggystring'
+import type { EdgeSpendInfo } from 'edge-core-js'
 
+import type {
+  EthereumCalcedFees,
+  EthereumFee,
+  EthereumFees
+} from './ethTypes.js'
+import { normalizeAddress } from './ethUtils.js'
+
+export const ES_FEE_CUSTOM = 'custom'
+export const ES_FEE_HIGH = 'high'
 export const ES_FEE_LOW = 'low'
 export const ES_FEE_STANDARD = 'standard'
-export const ES_FEE_HIGH = 'high'
-export const ES_FEE_CUSTOM = 'custom'
 
-export function calcMiningFee (spendInfo: EdgeSpendInfo, networkFees: EthereumFees): EthereumCalcedFees {
-  if (spendInfo.spendTargets && spendInfo.spendTargets.length && spendInfo.spendTargets[0].publicAddress) {
+export function calcMiningFee (
+  spendInfo: EdgeSpendInfo,
+  networkFees: EthereumFees
+): EthereumCalcedFees {
+  if (
+    spendInfo.spendTargets &&
+    spendInfo.spendTargets.length &&
+    spendInfo.spendTargets[0].publicAddress
+  ) {
     const { customNetworkFee } = spendInfo || {}
     if (spendInfo.networkFeeOption === ES_FEE_CUSTOM && customNetworkFee) {
       const { gasLimit, gasPrice } = customNetworkFee
       const gasPriceGwei = bns.mul(gasPrice, '1000000000')
-      if (gasLimit && bns.gt(gasLimit, '0') && gasPrice && bns.gt(gasPrice, '0')) {
+      if (
+        gasLimit &&
+        bns.gt(gasLimit, '0') &&
+        gasPrice &&
+        bns.gt(gasPrice, '0')
+      ) {
         return { gasLimit, gasPrice: gasPriceGwei }
       }
     }
-    const targetAddress = normalizeAddress(spendInfo.spendTargets[0].publicAddress)
-    let networkFeeForGasPrice:EthereumFee = networkFees['default']
-    let networkFeeForGasLimit:EthereumFee = networkFees['default']
+    const targetAddress = normalizeAddress(
+      spendInfo.spendTargets[0].publicAddress
+    )
+    let networkFeeForGasPrice: EthereumFee = networkFees['default']
+    let networkFeeForGasLimit: EthereumFee = networkFees['default']
 
     if (typeof networkFees[targetAddress] !== 'undefined') {
       networkFeeForGasLimit = networkFees[targetAddress]
@@ -63,7 +79,12 @@ export function calcMiningFee (spendInfo: EdgeSpendInfo, networkFees: EthereumFe
         gasPrice = gasPriceObj.lowFee
         break
       case ES_FEE_STANDARD:
-        if (bns.gte(nativeAmount, networkFeeForGasPrice.gasPrice.standardFeeHighAmount)) {
+        if (
+          bns.gte(
+            nativeAmount,
+            networkFeeForGasPrice.gasPrice.standardFeeHighAmount
+          )
+        ) {
           gasPrice = gasPriceObj.standardFeeHigh
           break
         }
@@ -76,11 +97,20 @@ export function calcMiningFee (spendInfo: EdgeSpendInfo, networkFees: EthereumFe
         }
 
         // Scale the fee by the amount the user is sending scaled between standardFeeLowAmount and standardFeeHighAmount
-        const lowHighAmountDiff = bns.sub(gasPriceObj.standardFeeHighAmount, gasPriceObj.standardFeeLowAmount)
-        const lowHighFeeDiff = bns.sub(gasPriceObj.standardFeeHigh, gasPriceObj.standardFeeLow)
+        const lowHighAmountDiff = bns.sub(
+          gasPriceObj.standardFeeHighAmount,
+          gasPriceObj.standardFeeLowAmount
+        )
+        const lowHighFeeDiff = bns.sub(
+          gasPriceObj.standardFeeHigh,
+          gasPriceObj.standardFeeLow
+        )
 
         // How much above the lowFeeAmount is the user sending
-        const amountDiffFromLow = bns.sub(nativeAmount, gasPriceObj.standardFeeLowAmount)
+        const amountDiffFromLow = bns.sub(
+          nativeAmount,
+          gasPriceObj.standardFeeLowAmount
+        )
 
         // Add this much to the low fee = (amountDiffFromLow * lowHighFeeDiff) / lowHighAmountDiff)
         const temp1 = bns.mul(amountDiffFromLow, lowHighFeeDiff)

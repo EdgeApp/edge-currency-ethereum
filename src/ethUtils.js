@@ -1,14 +1,43 @@
-/**
- * Created by paul on 8/26/17.
- * @flow
- */
+// @flow
 
 import { bns } from 'biggystring'
+import { BN } from 'bn.js'
 import { validate } from 'jsonschema'
+
+import { currencyInfo } from './currencyInfoETH.js'
+
 const Buffer = require('buffer/').Buffer
+
+function hexToBuf (hex: string) {
+  const noHexPrefix = hex.replace('0x', '')
+  const noHexPrefixBN = new BN(noHexPrefix, 16)
+  const array = noHexPrefixBN.toArray()
+  const buf = Buffer.from(array)
+  return buf
+}
+
+function getDenomInfo (denom: string) {
+  return currencyInfo.denominations.find(element => {
+    return element.name === denom
+  })
+}
 
 function normalizeAddress (address: string) {
   return address.toLowerCase().replace('0x', '')
+}
+
+function unpadAddress (address: string): string {
+  const unpadded = bns.add('0', address, 16)
+  return unpadded
+}
+
+function padAddress (address: string): string {
+  const normalizedAddress = normalizeAddress(address)
+  const padding = 64 - normalizedAddress.length
+  const zeroString =
+    '0000000000000000000000000000000000000000000000000000000000000000'
+  const out = '0x' + zeroString.slice(0, padding) + normalizedAddress
+  return out
 }
 
 function addHexPrefix (value: string) {
@@ -48,4 +77,14 @@ export function isHex (h: string) {
   return out
 }
 
-export { normalizeAddress, addHexPrefix, bufToHex, validateObject, toHex }
+export {
+  addHexPrefix,
+  bufToHex,
+  normalizeAddress,
+  padAddress,
+  toHex,
+  unpadAddress,
+  validateObject,
+  getDenomInfo,
+  hexToBuf
+}

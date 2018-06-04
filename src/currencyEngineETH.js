@@ -1,36 +1,52 @@
-/**
- * Created by paul on 7/7/17.
- */
 // @flow
 
-import { currencyInfo } from './currencyInfoETH.js'
+import { bns } from 'biggystring'
 import type {
   EdgeCurrencyEngine,
-  EdgeTransaction,
   EdgeCurrencyEngineCallbacks,
   EdgeCurrencyEngineOptions,
-  EdgeSpendInfo,
-  EdgeWalletInfo,
-  EdgeMetaToken,
   EdgeCurrencyInfo,
+  EdgeDataDump,
   EdgeDenomination,
   EdgeFreshAddress,
-  EdgeDataDump,
-  EdgeIo
+  EdgeIo,
+  EdgeMetaToken,
+  EdgeSpendInfo,
+  EdgeTransaction,
+  EdgeWalletInfo
 } from 'edge-core-js'
-import { calcMiningFee } from './miningFees.js'
 import { sprintf } from 'sprintf-js'
-import { bns } from 'biggystring'
-import { NetworkFeesSchema, CustomTokenSchema, EthGasStationSchema } from './ethSchema.js'
+
+import { currencyInfo } from './currencyInfoETH.js'
 import {
   DATA_STORE_FILE,
   DATA_STORE_FOLDER,
-  WalletLocalData,
-  type EthCustomToken,
-  type EthereumFeesGasPrice,
-  type EthereumFee
+  WalletLocalData
 } from './ethTypes.js'
-import { isHex, normalizeAddress, addHexPrefix, bufToHex, validateObject, toHex } from './ethUtils.js'
+import type {
+  BroadcastResults,
+  EthCustomToken,
+  EthereumFee,
+  EthereumFeesGasPrice,
+  TxidsByCurrencyCode,
+  TxidsWithTimestamp
+} from './ethTypes.js'
+import {
+  EthGasStationSchema,
+  CustomTokenSchema,
+  NetworkFeesSchema
+} from './ethSchema.js'
+import {
+  addHexPrefix,
+  bufToHex,
+  isHex,
+  normalizeAddress,
+  padAddress,
+  toHex,
+  unpadAddress,
+  validateObject
+} from './ethUtils.js'
+import { calcMiningFee } from './miningFees.js'
 
 const Buffer = require('buffer/').Buffer
 const abi = require('../lib/export-fixes-bundle.js').ABI
@@ -38,59 +54,41 @@ const ethWallet = require('../lib/export-fixes-bundle.js').Wallet
 const EthereumTx = require('../lib/export-fixes-bundle.js').Transaction
 
 const ADDRESS_POLL_MILLISECONDS = 3000
+const ADDRESS_QUERY_LOOKBACK_BLOCKS = 4 * 60 * 24 * 7 // ~ one week
 const BLOCKHEIGHT_POLL_MILLISECONDS = 5000
-const NETWORKFEES_POLL_MILLISECONDS = (60 * 10 * 1000) // 10 minutes
-const SAVE_DATASTORE_MILLISECONDS = 10000
-// const ADDRESS_QUERY_LOOKBACK_BLOCKS = '8' // ~ 2 minutes
-const ADDRESS_QUERY_LOOKBACK_BLOCKS = (4 * 60 * 24 * 7) // ~ one week
-
-const PRIMARY_CURRENCY = currencyInfo.currencyCode
 const CHECK_UNCONFIRMED = true
 const INFO_SERVERS = ['https://info1.edgesecure.co:8444']
-
-type BroadcastResults = {
-  incrementNonce: boolean,
-  decrementNonce: boolean
-}
-
-function unpadAddress (address: string): string {
-  const unpadded = bns.add('0', address, 16)
-  return unpadded
-}
-
-function padAddress (address: string): string {
-  const normalizedAddress = normalizeAddress(address)
-  const padding = 64 - normalizedAddress.length
-  const zeroString = '0000000000000000000000000000000000000000000000000000000000000000'
-  const out = '0x' + zeroString.slice(0, padding) + normalizedAddress
-  return out
-}
+const NETWORKFEES_POLL_MILLISECONDS = 60 * 10 * 1000 // 10 minutes
+const PRIMARY_CURRENCY = currencyInfo.currencyCode
+const SAVE_DATASTORE_MILLISECONDS = 10000
 
 class EthereumParams {
+  cumulativeGasUsed: string
+  errorVal: number
   from: Array<string>
-  to: Array<string>
   gas: string
   gasPrice: string
   gasUsed: string
-  cumulativeGasUsed: string
-  errorVal: number
+  to: Array<string>
   tokenRecipientAddress: string | null
 
-  constructor (from: Array<string>,
+  constructor (
+    from: Array<string>,
     to: Array<string>,
     gas: string,
     gasPrice: string,
     gasUsed: string,
     cumulativeGasUsed: string,
     errorVal: number,
-    tokenRecipientAddress: string | null) {
+    tokenRecipientAddress: string | null
+  ) {
+    this.cumulativeGasUsed = cumulativeGasUsed
+    this.errorVal = errorVal
     this.from = from
-    this.to = to
     this.gas = gas
     this.gasPrice = gasPrice
     this.gasUsed = gasUsed
-    this.errorVal = errorVal
-    this.cumulativeGasUsed = cumulativeGasUsed
+    this.to = to
     if (typeof tokenRecipientAddress === 'string') {
       this.tokenRecipientAddress = tokenRecipientAddress
     } else {
@@ -100,54 +98,52 @@ class EthereumParams {
 }
 
 class EthereumEngine {
-  walletInfo: EdgeWalletInfo
-  edgeTxLibCallbacks: EdgeCurrencyEngineCallbacks
-  walletLocalFolder: any
-  engineOn: boolean
   addressesChecked: boolean
+  allTokens: Array<EdgeMetaToken>
+  currencyInfo: EdgeCurrencyInfo
+  currentSettings: any
+  customTokens: Array<EdgeMetaToken>
+  edgeTxLibCallbacks: EdgeCurrencyEngineCallbacks
+  engineOn: boolean
+  io: EdgeIo
+  timers: any
   tokenCheckStatus: { [currencyCode: string]: number } // Each currency code can be a 0-1 value
+  transactionsChangedArray: Array<EdgeTransaction>
+  walletId: string
+  walletInfo: EdgeWalletInfo
   walletLocalData: WalletLocalData
   walletLocalDataDirty: boolean
-  transactionsChangedArray: Array<EdgeTransaction>
-  currencyInfo: EdgeCurrencyInfo
-  allTokens: Array<EdgeMetaToken>
-  customTokens: Array<EdgeMetaToken>
-  currentSettings: any
-  timers: any
-  walletId: string
-  io: EdgeIo
+  walletLocalFolder: any
 
-  constructor (io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
+  constructor (
+    io_: any,
+    walletInfo: EdgeWalletInfo,
+    opts: EdgeCurrencyEngineOptions
+  ) {
     // Validate that we are a valid EdgeCurrencyEngine:
     // eslint-disable-next-line no-unused-vars
     const test: EdgeCurrencyEngine = this
 
-    const { walletLocalFolder, callbacks } = opts
-
-    this.io = io_
-    this.engineOn = false
     this.addressesChecked = false
-    this.tokenCheckStatus = {}
-    this.walletLocalDataDirty = false
-    this.transactionsChangedArray = []
-    this.walletInfo = walletInfo
-    this.walletId = walletInfo.id ? `${walletInfo.id} - ` : ''
-    this.currencyInfo = currencyInfo
     this.allTokens = currencyInfo.metaTokens.slice(0)
+    this.currencyInfo = currencyInfo
+    this.currentSettings =
+      opts.optionalSettings || this.currencyInfo.defaultSettings
     this.customTokens = []
+    this.edgeTxLibCallbacks = opts.callbacks
+    this.engineOn = false
+    this.io = io_
     this.timers = {}
-
-    if (typeof opts.optionalSettings !== 'undefined') {
-      this.currentSettings = opts.optionalSettings
-    } else {
-      this.currentSettings = this.currencyInfo.defaultSettings
-    }
+    this.tokenCheckStatus = {}
+    this.transactionsChangedArray = []
+    this.walletId = walletInfo.id ? `${walletInfo.id} - ` : ''
+    this.walletInfo = walletInfo
+    this.walletLocalDataDirty = false
+    this.walletLocalFolder = opts.walletLocalFolder
 
     // Hard coded for testing
     // this.walletInfo.keys.ethereumKey = '389b07b3466eed587d6bdae09a3613611de9add2635432d6cd1521af7bbc3757'
     // this.walletInfo.keys.ethereumAddress = '0x9fa817e5A48DD1adcA7BEc59aa6E3B1F5C4BeA9a'
-    this.edgeTxLibCallbacks = callbacks
-    this.walletLocalFolder = walletLocalFolder
 
     // Fix messed-up wallets that have a private key in the wrong place:
     if (typeof this.walletInfo.keys.ethereumKey !== 'string') {
@@ -159,16 +155,25 @@ class EthereumEngine {
     // Fix messed-up wallets that have a public address in the wrong place:
     if (typeof this.walletInfo.keys.ethereumAddress !== 'string') {
       if (walletInfo.keys.ethereumPublicAddress) {
-        this.walletInfo.keys.ethereumAddress = walletInfo.keys.ethereumPublicAddress
-      } else if (walletInfo.keys.keys && walletInfo.keys.keys.ethereumPublicAddress) {
-        this.walletInfo.keys.ethereumAddress = walletInfo.keys.keys.ethereumPublicAddress
+        this.walletInfo.keys.ethereumAddress =
+          walletInfo.keys.ethereumPublicAddress
+      } else if (
+        walletInfo.keys.keys &&
+        walletInfo.keys.keys.ethereumPublicAddress
+      ) {
+        this.walletInfo.keys.ethereumAddress =
+          walletInfo.keys.keys.ethereumPublicAddress
       } else {
         const privKey = Buffer.from(this.walletInfo.keys.ethereumKey, 'hex')
         const wallet = ethWallet.fromPrivateKey(privKey)
         this.walletInfo.keys.ethereumAddress = wallet.getAddressString()
       }
     }
-    this.log(`Created Wallet Type ${this.walletInfo.type} for Currency Plugin ${this.currencyInfo.pluginName} `)
+    this.log(
+      `Created Wallet Type ${this.walletInfo.type} for Currency Plugin ${
+        this.currencyInfo.pluginName
+      } `
+    )
   }
 
   // *************************************
@@ -179,7 +184,12 @@ class EthereumEngine {
     if (global.etherscanApiKey && global.etherscanApiKey.length > 5) {
       apiKey = '&apikey=' + global.etherscanApiKey
     }
-    const url = sprintf('%s/api%s%s', this.currentSettings.otherSettings.etherscanApiServers[0], cmd, apiKey)
+    const url = sprintf(
+      '%s/api%s%s',
+      this.currentSettings.otherSettings.etherscanApiServers[0],
+      cmd,
+      apiKey
+    )
     return this.fetchGet(url)
   }
 
@@ -201,7 +211,12 @@ class EthereumEngine {
     if (global.blockcypherApiKey && global.blockcypherApiKey.length > 5) {
       apiKey = '&token=' + global.blockcypherApiKey
     }
-    const url = sprintf('%s/%s%s', this.currentSettings.otherSettings.blockcypherApiServers[0], cmd, apiKey)
+    const url = sprintf(
+      '%s/%s%s',
+      this.currentSettings.otherSettings.blockcypherApiServers[0],
+      cmd,
+      apiKey
+    )
     const response = await this.io.fetch(url, {
       headers: {
         Accept: 'application/json',
@@ -218,21 +233,25 @@ class EthereumEngine {
   // *************************************
   async blockHeightInnerLoop () {
     try {
-      const jsonObj = await this.fetchGetEtherscan('?module=proxy&action=eth_blockNumber')
+      const jsonObj = await this.fetchGetEtherscan(
+        '?module=proxy&action=eth_blockNumber'
+      )
       const valid = validateObject(jsonObj, {
-        'type': 'object',
-        'properties': {
-          'result': {'type': 'string'}
+        type: 'object',
+        properties: {
+          result: { type: 'string' }
         },
-        'required': ['result']
+        required: ['result']
       })
       if (valid) {
-        const blockHeight:number = parseInt(jsonObj.result, 16)
+        const blockHeight: number = parseInt(jsonObj.result, 16)
         this.log(`Got block height ${blockHeight}`)
         if (this.walletLocalData.blockHeight !== blockHeight) {
           this.walletLocalData.blockHeight = blockHeight // Convert to decimal
           this.walletLocalDataDirty = true
-          this.edgeTxLibCallbacks.onBlockHeightChanged(this.walletLocalData.blockHeight)
+          this.edgeTxLibCallbacks.onBlockHeightChanged(
+            this.walletLocalData.blockHeight
+          )
         }
       }
     } catch (err) {
@@ -241,12 +260,15 @@ class EthereumEngine {
   }
 
   processEtherscanTransaction (tx: any) {
-    let netNativeAmount:string // Amount received into wallet
-    const ourReceiveAddresses:Array<string> = []
+    let netNativeAmount: string // Amount received into wallet
+    const ourReceiveAddresses: Array<string> = []
 
-    const nativeNetworkFee:string = bns.mul(tx.gasPrice, tx.gasUsed)
+    const nativeNetworkFee: string = bns.mul(tx.gasPrice, tx.gasUsed)
 
-    if (tx.from.toLowerCase() === this.walletLocalData.ethereumAddress.toLowerCase()) {
+    if (
+      tx.from.toLowerCase() ===
+      this.walletLocalData.ethereumAddress.toLowerCase()
+    ) {
       netNativeAmount = bns.sub('0', tx.value)
 
       // For spends, include the network fee in the transaction amount
@@ -257,12 +279,14 @@ class EthereumEngine {
       }
     } else {
       netNativeAmount = bns.add('0', tx.value)
-      ourReceiveAddresses.push(this.walletLocalData.ethereumAddress.toLowerCase())
+      ourReceiveAddresses.push(
+        this.walletLocalData.ethereumAddress.toLowerCase()
+      )
     }
 
     const ethParams = new EthereumParams(
-      [ tx.from ],
-      [ tx.to ],
+      [tx.from],
+      [tx.to],
       tx.gas,
       tx.gasPrice,
       tx.gasUsed,
@@ -271,33 +295,42 @@ class EthereumEngine {
       null
     )
 
-    const edgeTransaction:EdgeTransaction = {
-      txid: tx.hash,
-      date: parseInt(tx.timeStamp),
-      currencyCode: 'ETH',
+    const edgeTransaction: EdgeTransaction = {
       blockHeight: parseInt(tx.blockNumber),
+      currencyCode: 'ETH',
+      date: parseInt(tx.timeStamp),
       nativeAmount: netNativeAmount,
       networkFee: nativeNetworkFee,
+      otherParams: ethParams,
       ourReceiveAddresses,
       signedTx: 'unsigned_right_now',
-      otherParams: ethParams
+      txid: tx.hash
     }
 
+    const { currencyCode, date, txid } = edgeTransaction
     const idx = this.findTransaction(PRIMARY_CURRENCY, tx.hash)
     if (idx === -1) {
       this.log(sprintf('New transaction: %s', tx.hash))
 
       // New transaction not in database
       this.addTransaction(PRIMARY_CURRENCY, edgeTransaction)
+      this.updateTxids(currencyCode, txid, date, this.walletLocalData.txids)
 
+      this.edgeTxLibCallbacks.onTxidsChanged(
+        currencyCode,
+        this.getTxids(currencyCode)
+      )
       this.edgeTxLibCallbacks.onTransactionsChanged(
         this.transactionsChangedArray
       )
       this.transactionsChangedArray = []
     } else {
       // Already have this tx in the database. See if anything changed
-      const transactionsArray = this.walletLocalData.transactionsObj[ PRIMARY_CURRENCY ]
-      const edgeTx = transactionsArray[ idx ]
+      // eslint-disable-next-line standard/computed-property-even-spacing
+      const transactionsArray = this.walletLocalData.transactionsObj[
+        PRIMARY_CURRENCY
+      ]
+      const edgeTx = transactionsArray[idx]
 
       if (
         edgeTx.blockHeight !== edgeTransaction.blockHeight ||
@@ -305,8 +338,16 @@ class EthereumEngine {
         edgeTx.nativeAmount !== edgeTransaction.nativeAmount ||
         edgeTx.otherParams.errorVal !== edgeTransaction.otherParams.errorVal
       ) {
-        this.log(sprintf('Update transaction: %s height:%s', tx.hash, tx.blockNumber))
+        this.log(
+          sprintf('Update transaction: %s height:%s', tx.hash, tx.blockNumber)
+        )
         this.updateTransaction(PRIMARY_CURRENCY, edgeTransaction, idx)
+        this.updateTxids(currencyCode, txid, date, this.walletLocalData.txids)
+
+        this.edgeTxLibCallbacks.onTxidsChanged(
+          currencyCode,
+          this.getTxids(currencyCode)
+        )
         this.edgeTxLibCallbacks.onTransactionsChanged(
           this.transactionsChangedArray
         )
@@ -318,8 +359,8 @@ class EthereumEngine {
   }
 
   processEtherscanTokenTransaction (tx: any, currencyCode: string) {
-    let netNativeAmount:string // Amount received into wallet
-    const ourReceiveAddresses:Array<string> = []
+    let netNativeAmount: string // Amount received into wallet
+    const ourReceiveAddresses: Array<string> = []
 
     // const nativeValueBN = new BN(tx.value, 10)
     const paddedAddress = padAddress(this.walletLocalData.ethereumAddress)
@@ -334,7 +375,9 @@ class EthereumEngine {
       fromAddress = unpadAddress(tx.topics[1])
       toAddress = this.walletLocalData.ethereumAddress
       netNativeAmount = bns.add('0', tx.data)
-      ourReceiveAddresses.push(this.walletLocalData.ethereumAddress.toLowerCase())
+      ourReceiveAddresses.push(
+        this.walletLocalData.ethereumAddress.toLowerCase()
+      )
     }
 
     if (netNativeAmount.length > 50) {
@@ -343,8 +386,8 @@ class EthereumEngine {
     }
 
     const ethParams = new EthereumParams(
-      [ fromAddress ],
-      [ toAddress ],
+      [fromAddress],
+      [toAddress],
       '',
       tx.gasPrice,
       tx.gasUsed,
@@ -353,7 +396,7 @@ class EthereumEngine {
       null
     )
 
-    const edgeTransaction:EdgeTransaction = {
+    const edgeTransaction: EdgeTransaction = {
       txid: tx.transactionHash,
       date: parseInt(tx.timeStamp),
       currencyCode,
@@ -365,30 +408,52 @@ class EthereumEngine {
       otherParams: ethParams
     }
 
+    const { date, txid } = edgeTransaction
     const idx = this.findTransaction(currencyCode, tx.transactionHash)
     if (idx === -1) {
       this.log(sprintf('New token transaction: %s', tx.transactionHash))
 
       // New transaction not in database
       this.addTransaction(currencyCode, edgeTransaction)
+      this.updateTxids(currencyCode, txid, date, this.walletLocalData.txids)
 
+      this.edgeTxLibCallbacks.onTxidsChanged(
+        currencyCode,
+        this.getTxids(currencyCode)
+      )
       this.edgeTxLibCallbacks.onTransactionsChanged(
         this.transactionsChangedArray
       )
       this.transactionsChangedArray = []
     } else {
       // Already have this tx in the database. See if anything changed
-      const transactionsArray = this.walletLocalData.transactionsObj[ currencyCode ]
-      const edgeTx = transactionsArray[ idx ]
+      // eslint-disable-next-line standard/computed-property-even-spacing
+      const transactionsArray = this.walletLocalData.transactionsObj[
+        currencyCode
+      ]
+      const edgeTx = transactionsArray[idx]
 
       if (
         edgeTx.blockHeight !== edgeTransaction.blockHeight ||
         edgeTx.networkFee !== edgeTransaction.networkFee ||
         edgeTx.nativeAmount !== edgeTransaction.nativeAmount ||
+        edgeTx.date !== edgeTransaction.date ||
         edgeTx.otherParams.errorVal !== edgeTransaction.otherParams.errorVal
       ) {
-        this.log(sprintf('Update token transaction: %s height:%s', edgeTx.txid, edgeTx.blockHeight))
+        this.log(
+          sprintf(
+            'Update token transaction: %s height:%s',
+            edgeTx.txid,
+            edgeTx.blockHeight
+          )
+        )
         this.updateTransaction(currencyCode, edgeTransaction, idx)
+        this.updateTxids(currencyCode, txid, date, this.walletLocalData.txids)
+
+        this.edgeTxLibCallbacks.onTxidsChanged(
+          currencyCode,
+          this.getTxids(currencyCode)
+        )
         this.edgeTxLibCallbacks.onTransactionsChanged(
           this.transactionsChangedArray
         )
@@ -403,10 +468,13 @@ class EthereumEngine {
     const fromAddress = '0x' + tx.inputs[0].addresses[0]
     const toAddress = '0x' + tx.outputs[0].addresses[0]
     const epochTime = Date.parse(tx.received) / 1000
-    const ourReceiveAddresses:Array<string> = []
+    const ourReceiveAddresses: Array<string> = []
 
     let nativeAmount: string
-    if (normalizeAddress(fromAddress) === normalizeAddress(this.walletLocalData.ethereumAddress)) {
+    if (
+      normalizeAddress(fromAddress) ===
+      normalizeAddress(this.walletLocalData.ethereumAddress)
+    ) {
       nativeAmount = (0 - tx.total).toString(10)
       nativeAmount = bns.sub(nativeAmount, tx.fees.toString(10))
     } else {
@@ -415,8 +483,8 @@ class EthereumEngine {
     }
 
     const ethParams = new EthereumParams(
-      [ fromAddress ],
-      [ toAddress ],
+      [fromAddress],
+      [toAddress],
       '',
       '',
       tx.fees.toString(10),
@@ -425,44 +493,37 @@ class EthereumEngine {
       null
     )
 
-    const edgeTransaction:EdgeTransaction = {
-      txid: addHexPrefix(tx.hash),
-      date: epochTime,
-      currencyCode: 'ETH',
+    const edgeTransaction: EdgeTransaction = {
       blockHeight: tx.block_height,
+      currencyCode: 'ETH',
+      date: epochTime,
       nativeAmount,
       networkFee: tx.fees.toString(10),
+      otherParams: ethParams,
       ourReceiveAddresses,
       signedTx: 'iwassignedyoucantrustme',
-      otherParams: ethParams
+      txid: addHexPrefix(tx.hash)
     }
 
+    const { currencyCode, date, txid } = edgeTransaction
     const idx = this.findTransaction(PRIMARY_CURRENCY, tx.hash)
     if (idx === -1) {
-      this.log(sprintf('processUnconfirmedTransaction: New transaction: %s', tx.hash))
+      this.log(
+        sprintf('processUnconfirmedTransaction: New transaction: %s', tx.hash)
+      )
 
       // New transaction not in database
       this.addTransaction(PRIMARY_CURRENCY, edgeTransaction)
+      this.updateTxids(currencyCode, txid, date, this.walletLocalData.txids)
 
+      this.edgeTxLibCallbacks.onTxidsChanged(
+        currencyCode,
+        this.getTxids(currencyCode)
+      )
       this.edgeTxLibCallbacks.onTransactionsChanged(
         this.transactionsChangedArray
       )
       this.transactionsChangedArray = []
-    } else {
-      // Already have this tx in the database. See if anything changed
-      // const transactionsArray:Array<EdgeTransaction> = this.walletLocalData.transactionsObj[ PRIMARY_CURRENCY ]
-      // const edgeTx:EdgeTransaction = transactionsArray[ idx ]
-      //
-      // if (edgeTx.blockHeight < tx.block_height || edgeTx.date > epochTime) {
-      //   this.log(sprintf('processUnconfirmedTransaction: Update transaction: %s height:%s', tx.hash, tx.blockNumber))
-      //   this.updateTransaction(PRIMARY_CURRENCY, edgeTransaction, idx)
-      //   this.edgeTxLibCallbacks.onTransactionsChanged(
-      //     this.transactionsChangedArray
-      //   )
-      //   this.transactionsChangedArray = []
-      // } else {
-      // this.log(sprintf('processUnconfirmedTransaction: Old transaction. No Update: %s', tx.hash))
-      // }
     }
   }
 
@@ -474,11 +535,11 @@ class EthereumEngine {
     try {
       jsonObj = await this.fetchGetEtherscan(url)
       valid = validateObject(jsonObj, {
-        'type': 'object',
-        'properties': {
-          'result': {'type': 'string'}
+        type: 'object',
+        properties: {
+          result: { type: 'string' }
         },
-        'required': ['result']
+        required: ['result']
       })
       if (valid) {
         const balance = jsonObj.result
@@ -502,42 +563,52 @@ class EthereumEngine {
 
   async checkTransactionsFetch () {
     const address = this.walletLocalData.ethereumAddress
-    const endBlock:number = 999999999
-    let startBlock:number = 0
+    const endBlock: number = 999999999
+    let startBlock: number = 0
     let checkAddressSuccess = true
     let url = ''
     let jsonObj = {}
     let valid = false
-    if (this.walletLocalData.lastAddressQueryHeight > ADDRESS_QUERY_LOOKBACK_BLOCKS) {
+    if (
+      this.walletLocalData.lastAddressQueryHeight >
+      ADDRESS_QUERY_LOOKBACK_BLOCKS
+    ) {
       // Only query for transactions as far back as ADDRESS_QUERY_LOOKBACK_BLOCKS from the last time we queried transactions
-      startBlock = this.walletLocalData.lastAddressQueryHeight - ADDRESS_QUERY_LOOKBACK_BLOCKS
+      startBlock =
+        this.walletLocalData.lastAddressQueryHeight -
+        ADDRESS_QUERY_LOOKBACK_BLOCKS
     }
 
     try {
-      url = sprintf('?module=account&action=txlist&address=%s&startblock=%d&endblock=%d&sort=asc', address, startBlock, endBlock)
+      url = sprintf(
+        '?module=account&action=txlist&address=%s&startblock=%d&endblock=%d&sort=asc',
+        address,
+        startBlock,
+        endBlock
+      )
       jsonObj = await this.fetchGetEtherscan(url)
       valid = validateObject(jsonObj, {
-        'type': 'object',
-        'properties': {
-          'result': {
-            'type': 'array',
-            'items': {
-              'type': 'object',
-              'properties': {
-                'blockNumber': {'type': 'string'},
-                'timeStamp': {'type': 'string'},
-                'hash': {'type': 'string'},
-                'from': {'type': 'string'},
-                'to': {'type': 'string'},
-                'nonce': {'type': 'string'},
-                'value': {'type': 'string'},
-                'gas': {'type': 'string'},
-                'gasPrice': {'type': 'string'},
-                'cumulativeGasUsed': {'type': 'string'},
-                'gasUsed': {'type': 'string'},
-                'confirmations': {'type': 'string'}
+        type: 'object',
+        properties: {
+          result: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                blockNumber: { type: 'string' },
+                timeStamp: { type: 'string' },
+                hash: { type: 'string' },
+                from: { type: 'string' },
+                to: { type: 'string' },
+                nonce: { type: 'string' },
+                value: { type: 'string' },
+                gas: { type: 'string' },
+                gasPrice: { type: 'string' },
+                cumulativeGasUsed: { type: 'string' },
+                gasUsed: { type: 'string' },
+                confirmations: { type: 'string' }
               },
-              'required': [
+              required: [
                 'blockNumber',
                 'timeStamp',
                 'hash',
@@ -554,7 +625,7 @@ class EthereumEngine {
             }
           }
         },
-        'required': ['result']
+        required: ['result']
       })
 
       if (valid) {
@@ -566,13 +637,14 @@ class EthereumEngine {
         for (let i = 0; i < transactions.length; i++) {
           const tx = transactions[i]
           this.processEtherscanTransaction(tx)
-          this.tokenCheckStatus[ PRIMARY_CURRENCY ] = ((i + 1) / transactions.length)
+          this.tokenCheckStatus[PRIMARY_CURRENCY] =
+            (i + 1) / transactions.length
           if (i % 10 === 0) {
             this.updateOnAddressesChecked()
           }
         }
         if (transactions.length === 0) {
-          this.tokenCheckStatus[ PRIMARY_CURRENCY ] = 1
+          this.tokenCheckStatus[PRIMARY_CURRENCY] = 1
         }
         this.updateOnAddressesChecked()
       } else {
@@ -619,14 +691,19 @@ class EthereumEngine {
 
   async checkTokenTransactionsFetch (currencyCode: string) {
     const address = padAddress(this.walletLocalData.ethereumAddress)
-    let startBlock:number = 0
+    let startBlock: number = 0
     let checkAddressSuccess = true
     let url = ''
     let jsonObj = {}
     let valid = false
-    if (this.walletLocalData.lastAddressQueryHeight > ADDRESS_QUERY_LOOKBACK_BLOCKS) {
+    if (
+      this.walletLocalData.lastAddressQueryHeight >
+      ADDRESS_QUERY_LOOKBACK_BLOCKS
+    ) {
       // Only query for transactions as far back as ADDRESS_QUERY_LOOKBACK_BLOCKS from the last time we queried transactions
-      startBlock = this.walletLocalData.lastAddressQueryHeight - ADDRESS_QUERY_LOOKBACK_BLOCKS
+      startBlock =
+        this.walletLocalData.lastAddressQueryHeight -
+        ADDRESS_QUERY_LOOKBACK_BLOCKS
     }
 
     const tokenInfo = this.getTokenInfo(currencyCode)
@@ -638,29 +715,34 @@ class EthereumEngine {
     }
 
     try {
-      url = sprintf('?module=logs&action=getLogs&fromBlock=%d&toBlock=latest&address=%s&topic0=0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef&topic0_1_opr=and&topic1=%s&topic1_2_opr=or&topic2=%s',
-        startBlock, contractAddress, address, address)
+      url = sprintf(
+        '?module=logs&action=getLogs&fromBlock=%d&toBlock=latest&address=%s&topic0=0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef&topic0_1_opr=and&topic1=%s&topic1_2_opr=or&topic2=%s',
+        startBlock,
+        contractAddress,
+        address,
+        address
+      )
       jsonObj = await this.fetchGetEtherscan(url)
       valid = validateObject(jsonObj, {
-        'type': 'object',
-        'properties': {
-          'result': {
-            'type': 'array',
-            'items': {
-              'type': 'object',
-              'properties': {
-                'data': {'type': 'string'},
-                'blockNumber': {'type': 'string'},
-                'timeStamp': {'type': 'string'},
-                'transactionHash': {'type': 'string'},
-                'gasPrice': {'type': 'string'},
-                'gasUsed': {'type': 'string'},
-                'topics': {
-                  'type': 'array',
-                  'items': { 'type': 'string' }
+        type: 'object',
+        properties: {
+          result: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                data: { type: 'string' },
+                blockNumber: { type: 'string' },
+                timeStamp: { type: 'string' },
+                transactionHash: { type: 'string' },
+                gasPrice: { type: 'string' },
+                gasUsed: { type: 'string' },
+                topics: {
+                  type: 'array',
+                  items: { type: 'string' }
                 }
               },
-              'required': [
+              required: [
                 'data',
                 'blockNumber',
                 'timeStamp',
@@ -672,19 +754,23 @@ class EthereumEngine {
             }
           }
         },
-        'required': ['result']
+        required: ['result']
       })
 
       if (valid) {
         const transactions = jsonObj.result
-        this.log(`Fetched token ${tokenInfo.currencyCode} transactions count: ${transactions.length}`)
+        this.log(
+          `Fetched token ${tokenInfo.currencyCode} transactions count: ${
+            transactions.length
+          }`
+        )
 
         // Get transactions
         // Iterate over transactions in address
         for (let i = 0; i < transactions.length; i++) {
           const tx = transactions[i]
           this.processEtherscanTokenTransaction(tx, currencyCode)
-          this.tokenCheckStatus[currencyCode] = ((i + 1) / transactions.length)
+          this.tokenCheckStatus[currencyCode] = (i + 1) / transactions.length
           if (i % 10 === 0) {
             this.updateOnAddressesChecked()
           }
@@ -705,7 +791,11 @@ class EthereumEngine {
 
   async checkUnconfirmedTransactionsFetch () {
     const address = normalizeAddress(this.walletLocalData.ethereumAddress)
-    const url = sprintf('%s/v1/eth/main/txs/%s', this.currentSettings.otherSettings.superethServers[0], address)
+    const url = sprintf(
+      '%s/v1/eth/main/txs/%s',
+      this.currentSettings.otherSettings.superethServers[0],
+      address
+    )
     let jsonObj = null
     try {
       jsonObj = await this.fetchGet(url)
@@ -716,55 +806,45 @@ class EthereumEngine {
     }
 
     const valid = validateObject(jsonObj, {
-      'type': 'array',
-      'items': {
-        'type': 'object',
-        'properties': {
-          'block_height': { 'type': 'number' },
-          'fees': { 'type': 'number' },
-          'received': { 'type': 'string' },
-          'addresses': {
-            'type': 'array',
-            'items': { 'type': 'string' }
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          block_height: { type: 'number' },
+          fees: { type: 'number' },
+          received: { type: 'string' },
+          addresses: {
+            type: 'array',
+            items: { type: 'string' }
           },
-          'inputs': {
-            'type': 'array',
-            'items': {
-              'type': 'object',
-              'properties': {
-                'addresses': {
-                  'type': 'array',
-                  'items': { 'type': 'string' }
+          inputs: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                addresses: {
+                  type: 'array',
+                  items: { type: 'string' }
                 }
               },
-              'required': [
-                'addresses'
-              ]
+              required: ['addresses']
             }
           },
-          'outputs': {
-            'type': 'array',
-            'items': {
-              'type': 'object',
-              'properties': {
-                'addresses': {
-                  'type': 'array',
-                  'items': { 'type': 'string' }
+          outputs: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                addresses: {
+                  type: 'array',
+                  items: { type: 'string' }
                 }
               },
-              'required': [
-                'addresses'
-              ]
+              required: ['addresses']
             }
           }
         },
-        'required': [
-          'fees',
-          'received',
-          'addresses',
-          'inputs',
-          'outputs'
-        ]
+        required: ['fees', 'received', 'addresses', 'inputs', 'outputs']
       }
     })
 
@@ -800,12 +880,19 @@ class EthereumEngine {
       // https://api.etherscan.io/api?module=account&action=tokenbalance&contractaddress=0x57d90b64a1a57749b0f932f1a3395792e12e7055&address=0xe04f27eb70e025b78871a2ad7eabe85e61212761&tag=latest&apikey=YourApiKeyToken
       for (const tk of this.walletLocalData.enabledTokens) {
         if (tk === PRIMARY_CURRENCY) {
-          url = sprintf('?module=account&action=balance&address=%s&tag=latest', address)
+          url = sprintf(
+            '?module=account&action=balance&address=%s&tag=latest',
+            address
+          )
         } else {
           if (this.getTokenStatus(tk)) {
             const tokenInfo = this.getTokenInfo(tk)
             if (tokenInfo && typeof tokenInfo.contractAddress === 'string') {
-              url = sprintf('?module=account&action=tokenbalance&contractaddress=%s&address=%s&tag=latest', tokenInfo.contractAddress, this.walletLocalData.ethereumAddress)
+              url = sprintf(
+                '?module=account&action=tokenbalance&contractaddress=%s&address=%s&tag=latest',
+                tokenInfo.contractAddress,
+                this.walletLocalData.ethereumAddress
+              )
               promiseArray.push(this.checkTokenTransactionsFetch(tk))
             } else {
               continue
@@ -828,7 +915,9 @@ class EthereumEngine {
   }
 
   findTransaction (currencyCode: string, txid: string) {
-    if (typeof this.walletLocalData.transactionsObj[currencyCode] === 'undefined') {
+    if (
+      typeof this.walletLocalData.transactionsObj[currencyCode] === 'undefined'
+    ) {
       return -1
     }
 
@@ -848,7 +937,10 @@ class EthereumEngine {
 
     if (idx === -1) {
       this.log('addTransaction: adding and sorting:' + edgeTransaction.txid)
-      if (typeof this.walletLocalData.transactionsObj[currencyCode] === 'undefined') {
+      if (
+        typeof this.walletLocalData.transactionsObj[currencyCode] ===
+        'undefined'
+      ) {
         this.walletLocalData.transactionsObj[currencyCode] = []
       }
       this.walletLocalData.transactionsObj[currencyCode].push(edgeTransaction)
@@ -862,7 +954,11 @@ class EthereumEngine {
     }
   }
 
-  updateTransaction (currencyCode: string, edgeTransaction: EdgeTransaction, idx: number) {
+  updateTransaction (
+    currencyCode: string,
+    edgeTransaction: EdgeTransaction,
+    idx: number
+  ) {
     // Update the transaction
     this.walletLocalData.transactionsObj[currencyCode][idx] = edgeTransaction
     this.walletLocalDataDirty = true
@@ -911,7 +1007,10 @@ class EthereumEngine {
       const valid = validateObject(jsonObj, EthGasStationSchema)
 
       if (valid) {
-        const ethereumFee: EthereumFee = this.walletLocalData.networkFees['default']
+        // eslint-disable-next-line standard/computed-property-even-spacing
+        const ethereumFee: EthereumFee = this.walletLocalData.networkFees[
+          'default'
+        ]
         if (!ethereumFee.gasPrice) {
           return
         }
@@ -944,7 +1043,9 @@ class EthereumEngine {
         gasPrice.highFee = (fastest * 1000000000).toString()
 
         // We use a value that is somewhere in between average and fastest for the standardFeeHigh
-        gasPrice.standardFeeHigh = (Math.floor((average + fastest) * 0.75) * 1000000000).toString()
+        gasPrice.standardFeeHigh = (
+          Math.floor((average + fastest) * 0.75) * 1000000000
+        ).toString()
       } else {
         this.log('Error: Fetched invalid networkFees from EthGasStation')
       }
@@ -960,7 +1061,14 @@ class EthereumEngine {
         this.edgeTxLibCallbacks.onTransactionsChanged(
           this.walletLocalData.transactionsObj[currencyCode]
         )
-        this.edgeTxLibCallbacks.onBalanceChanged(currencyCode, this.walletLocalData.totalBalances[currencyCode])
+        this.edgeTxLibCallbacks.onBalanceChanged(
+          currencyCode,
+          this.walletLocalData.totalBalances[currencyCode]
+        )
+        this.edgeTxLibCallbacks.onTxidsChanged(
+          currencyCode,
+          this.getTxids(currencyCode)
+        )
       } catch (e) {
         this.log('Error for currencyCode', currencyCode, e)
       }
@@ -1079,8 +1187,10 @@ class EthereumEngine {
       // If token is already in currencyInfo, error as it cannot be changed
       for (const tk of this.currencyInfo.metaTokens) {
         if (
-          tk.currencyCode.toLowerCase() === ethTokenObj.currencyCode.toLowerCase() ||
-          tk.currencyName.toLowerCase() === ethTokenObj.currencyName.toLowerCase()
+          tk.currencyCode.toLowerCase() ===
+            ethTokenObj.currencyCode.toLowerCase() ||
+          tk.currencyName.toLowerCase() ===
+            ethTokenObj.currencyName.toLowerCase()
         ) {
           throw new Error('ErrorCannotModifyToken')
         }
@@ -1090,16 +1200,27 @@ class EthereumEngine {
       if (ethTokenObj.currencyCode.toUpperCase() !== ethTokenObj.currencyCode) {
         throw new Error('ErrorInvalidCurrencyCode')
       }
-      if (ethTokenObj.currencyCode.length < 2 || ethTokenObj.currencyCode.length > 7) {
+      if (
+        ethTokenObj.currencyCode.length < 2 ||
+        ethTokenObj.currencyCode.length > 7
+      ) {
         throw new Error('ErrorInvalidCurrencyCodeLength')
       }
-      if (ethTokenObj.currencyName.length < 3 || ethTokenObj.currencyName.length > 20) {
+      if (
+        ethTokenObj.currencyName.length < 3 ||
+        ethTokenObj.currencyName.length > 20
+      ) {
         throw new Error('ErrorInvalidCurrencyNameLength')
       }
-      if (bns.lt(ethTokenObj.multiplier, '1') || bns.gt(ethTokenObj.multiplier, '100000000000000000000000000000000')) {
+      if (
+        bns.lt(ethTokenObj.multiplier, '1') ||
+        bns.gt(ethTokenObj.multiplier, '100000000000000000000000000000000')
+      ) {
         throw new Error('ErrorInvalidMultiplier')
       }
-      let contractAddress = ethTokenObj.contractAddress.replace('0x', '').toLowerCase()
+      let contractAddress = ethTokenObj.contractAddress
+        .replace('0x', '')
+        .toLowerCase()
       if (!isHex(contractAddress) || contractAddress.length !== 40) {
         throw new Error('ErrorInvalidContractAddress')
       }
@@ -1107,11 +1228,15 @@ class EthereumEngine {
 
       for (const tk of this.customTokens) {
         if (
-          tk.currencyCode.toLowerCase() === ethTokenObj.currencyCode.toLowerCase() ||
-          tk.currencyName.toLowerCase() === ethTokenObj.currencyName.toLowerCase()
+          tk.currencyCode.toLowerCase() ===
+            ethTokenObj.currencyCode.toLowerCase() ||
+          tk.currencyName.toLowerCase() ===
+            ethTokenObj.currencyName.toLowerCase()
         ) {
           // Remove old token first then re-add it to incorporate any modifications
-          const idx = this.customTokens.findIndex(element => element.currencyCode === ethTokenObj.currencyCode)
+          const idx = this.customTokens.findIndex(
+            element => element.currencyCode === ethTokenObj.currencyCode
+          )
           if (idx !== -1) {
             this.customTokens.splice(idx, 1)
           }
@@ -1149,9 +1274,9 @@ class EthereumEngine {
 
     if (typeof options !== 'undefined') {
       const valid = validateObject(options, {
-        'type': 'object',
-        'properties': {
-          'currencyCode': {'type': 'string'}
+        type: 'object',
+        properties: {
+          currencyCode: { type: 'string' }
         }
       })
 
@@ -1160,7 +1285,9 @@ class EthereumEngine {
       }
     }
 
-    if (typeof this.walletLocalData.totalBalances[currencyCode] === 'undefined') {
+    if (
+      typeof this.walletLocalData.totalBalances[currencyCode] === 'undefined'
+    ) {
       return '0'
     } else {
       const nativeBalance = this.walletLocalData.totalBalances[currencyCode]
@@ -1173,9 +1300,9 @@ class EthereumEngine {
     let currencyCode = PRIMARY_CURRENCY
 
     const valid = validateObject(options, {
-      'type': 'object',
-      'properties': {
-        'currencyCode': {'type': 'string'}
+      type: 'object',
+      properties: {
+        currencyCode: { type: 'string' }
       }
     })
 
@@ -1183,21 +1310,30 @@ class EthereumEngine {
       currencyCode = options.currencyCode
     }
 
-    if (typeof this.walletLocalData.transactionsObj[currencyCode] === 'undefined') {
+    if (
+      typeof this.walletLocalData.transactionsObj[currencyCode] === 'undefined'
+    ) {
       return 0
     } else {
       return this.walletLocalData.transactionsObj[currencyCode].length
     }
   }
 
+  // synchronous
+  getTxids (
+    currencyCode: string = currencyInfo.currencyCode
+  ): TxidsWithTimestamp {
+    return this.walletLocalData.txids[currencyCode] || {}
+  }
+
   // asynchronous
   async getTransactions (options: any) {
-    let currencyCode:string = PRIMARY_CURRENCY
+    let currencyCode: string = PRIMARY_CURRENCY
 
-    const valid:boolean = validateObject(options, {
-      'type': 'object',
-      'properties': {
-        'currencyCode': {'type': 'string'}
+    const valid: boolean = validateObject(options, {
+      type: 'object',
+      properties: {
+        currencyCode: { type: 'string' }
       }
     })
 
@@ -1205,20 +1341,21 @@ class EthereumEngine {
       currencyCode = options.currencyCode
     }
 
-    if (typeof this.walletLocalData.transactionsObj[currencyCode] === 'undefined') {
+    if (
+      typeof this.walletLocalData.transactionsObj[currencyCode] === 'undefined'
+    ) {
       return []
     }
 
-    let startIndex:number = 0
-    let numEntries:number = 0
+    let startIndex: number = 0
+    let numEntries: number = 0
     if (options === null) {
       return this.walletLocalData.transactionsObj[currencyCode].slice(0)
     }
     if (options.startIndex !== null && options.startIndex > 0) {
       startIndex = options.startIndex
       if (
-        startIndex >=
-        this.walletLocalData.transactionsObj[currencyCode].length
+        startIndex >= this.walletLocalData.transactionsObj[currencyCode].length
       ) {
         startIndex =
           this.walletLocalData.transactionsObj[currencyCode].length - 1
@@ -1232,8 +1369,7 @@ class EthereumEngine {
       ) {
         // Don't read past the end of the transactionsObj
         numEntries =
-          this.walletLocalData.transactionsObj[currencyCode].length -
-          startIndex
+          this.walletLocalData.transactionsObj[currencyCode].length - startIndex
       }
     }
 
@@ -1259,8 +1395,7 @@ class EthereumEngine {
   }
 
   // synchronous
-  addGapLimitAddresses (addresses: Array<string>, options: any) {
-  }
+  addGapLimitAddresses (addresses: Array<string>, options: any) {}
 
   // synchronous
   isAddressUsed (address: string, options: any) {
@@ -1271,51 +1406,51 @@ class EthereumEngine {
   async makeSpend (edgeSpendInfo: EdgeSpendInfo) {
     // Validate the spendInfo
     const valid = validateObject(edgeSpendInfo, {
-      'type': 'object',
-      'properties': {
-        'currencyCode': { 'type': 'string' },
-        'networkFeeOption': { 'type': 'string' },
-        'spendTargets': {
-          'type': 'array',
-          'items': {
-            'type': 'object',
-            'properties': {
-              'currencyCode': { 'type': 'string' },
-              'publicAddress': { 'type': 'string' },
-              'nativeAmount': { 'type': 'string' },
-              'destMetadata': { 'type': 'object' },
-              'destWallet': { 'type': 'object' }
+      type: 'object',
+      properties: {
+        currencyCode: { type: 'string' },
+        networkFeeOption: { type: 'string' },
+        spendTargets: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              currencyCode: { type: 'string' },
+              publicAddress: { type: 'string' },
+              nativeAmount: { type: 'string' },
+              destMetadata: { type: 'object' },
+              destWallet: { type: 'object' }
             },
-            'required': [
-              'publicAddress'
-            ]
+            required: ['publicAddress']
           }
         }
       },
-      'required': [ 'spendTargets' ]
+      required: ['spendTargets']
     })
 
     if (!valid) {
-      throw (new Error('Error: invalid ABCSpendInfo'))
+      throw new Error('Error: invalid ABCSpendInfo')
     }
 
     // Ethereum can only have one output
     if (edgeSpendInfo.spendTargets.length !== 1) {
-      throw (new Error('Error: only one output allowed'))
+      throw new Error('Error: only one output allowed')
     }
 
     let tokenInfo = {}
     tokenInfo.contractAddress = ''
 
-    let currencyCode:string = ''
+    let currencyCode: string = ''
     if (typeof edgeSpendInfo.currencyCode === 'string') {
       currencyCode = edgeSpendInfo.currencyCode
       if (!this.getTokenStatus(currencyCode)) {
-        throw (new Error('Error: Token not supported or enabled'))
+        throw new Error('Error: Token not supported or enabled')
       } else if (currencyCode !== 'ETH') {
         tokenInfo = this.getTokenInfo(currencyCode)
         if (!tokenInfo || typeof tokenInfo.contractAddress !== 'string') {
-          throw (new Error('Error: Token not supported or invalid contract address'))
+          throw new Error(
+            'Error: Token not supported or invalid contract address'
+          )
         }
       }
     } else {
@@ -1327,7 +1462,10 @@ class EthereumEngine {
     // Get the fee amount
 
     let ethParams = {}
-    const { gasLimit, gasPrice } = calcMiningFee(edgeSpendInfo, this.walletLocalData.networkFees)
+    const { gasLimit, gasPrice } = calcMiningFee(
+      edgeSpendInfo,
+      this.walletLocalData.networkFees
+    )
 
     let publicAddress = ''
     if (typeof edgeSpendInfo.spendTargets[0].publicAddress === 'string') {
@@ -1370,20 +1508,15 @@ class EthereumEngine {
     if (typeof edgeSpendInfo.spendTargets[0].nativeAmount === 'string') {
       nativeAmount = edgeSpendInfo.spendTargets[0].nativeAmount
     } else {
-      throw (new Error('Error: no amount specified'))
+      throw new Error('Error: no amount specified')
     }
 
     const InsufficientFundsError = new Error('Insufficient funds')
     InsufficientFundsError.name = 'ErrorInsufficientFunds'
-    const InsufficientFundsEthError = new Error('Insufficient ETH for transaction fee')
+    const InsufficientFundsEthError = new Error(
+      'Insufficient ETH for transaction fee'
+    )
     InsufficientFundsEthError.name = 'ErrorInsufficientFundsMoreEth'
-
-    // Check for insufficient funds
-    // let nativeAmountBN = new BN(nativeAmount, 10)
-    // const gasPriceBN = new BN(gasPrice, 10)
-    // const gasLimitBN = new BN(gasLimit, 10)
-    // const nativeNetworkFeeBN = gasPriceBN.mul(gasLimitBN)
-    // const balanceEthBN = new BN(this.walletLocalData.totalBalances.ETH, 10)
 
     const balanceEth = this.walletLocalData.totalBalances.ETH
     let nativeNetworkFee = bns.mul(gasPrice, gasLimit)
@@ -1393,32 +1526,28 @@ class EthereumEngine {
     if (currencyCode === PRIMARY_CURRENCY) {
       totalTxAmount = bns.add(nativeNetworkFee, nativeAmount)
       if (bns.gt(totalTxAmount, balanceEth)) {
-        throw (InsufficientFundsError)
+        throw InsufficientFundsError
       }
       nativeAmount = bns.mul(totalTxAmount, '-1')
     } else {
       parentNetworkFee = nativeNetworkFee
 
       if (bns.gt(nativeNetworkFee, balanceEth)) {
-        throw (InsufficientFundsEthError)
+        throw InsufficientFundsEthError
       }
 
       nativeNetworkFee = '0' // Do not show a fee for token transations.
       const balanceToken = this.walletLocalData.totalBalances[currencyCode]
       if (bns.gt(nativeAmount, balanceToken)) {
-        throw (InsufficientFundsError)
+        throw InsufficientFundsError
       }
       nativeAmount = bns.mul(nativeAmount, '-1')
     }
 
-    // const negativeOneBN = new BN('-1', 10)
-    // nativeAmountBN.imul(negativeOneBN)
-    // nativeAmount = nativeAmountBN.toString(10)
-
     // **********************************
     // Create the unsigned EdgeTransaction
 
-    const edgeTransaction:EdgeTransaction = {
+    const edgeTransaction: EdgeTransaction = {
       txid: '', // txid
       date: 0, // date
       currencyCode, // currencyCode
@@ -1448,15 +1577,15 @@ class EthereumEngine {
     // let nativeAmountHex = bns.mul('-1', edgeTransaction.nativeAmount, 16)
     if (edgeTransaction.currencyCode === PRIMARY_CURRENCY) {
       // Remove the networkFee from the nativeAmount
-      const nativeAmount = bns.add(edgeTransaction.nativeAmount, edgeTransaction.networkFee)
+      const nativeAmount = bns.add(
+        edgeTransaction.nativeAmount,
+        edgeTransaction.networkFee
+      )
       nativeAmountHex = bns.mul('-1', nativeAmount, 16)
     } else {
       nativeAmountHex = bns.mul('-1', edgeTransaction.nativeAmount, 16)
     }
 
-    // const nonceBN = new BN(this.walletLocalData.nextNonce.toString(10), 10)
-    // const nonceHex = '0x' + nonceBN.toString(16)
-    //
     const nonceHex = toHex(this.walletLocalData.nextNonce)
     let data
     if (edgeTransaction.currencyCode === PRIMARY_CURRENCY) {
@@ -1497,7 +1626,9 @@ class EthereumEngine {
     return edgeTransaction
   }
 
-  async broadcastEtherscan (edgeTransaction: EdgeTransaction): Promise<BroadcastResults> {
+  async broadcastEtherscan (
+    edgeTransaction: EdgeTransaction
+  ): Promise<BroadcastResults> {
     const result: BroadcastResults = {
       incrementNonce: false,
       decrementNonce: false
@@ -1505,7 +1636,10 @@ class EthereumEngine {
     const transactionParsed = JSON.stringify(edgeTransaction, null, 2)
 
     this.log(`Etherscan: sent transaction to network:\n${transactionParsed}\n`)
-    const url = sprintf('?module=proxy&action=eth_sendRawTransaction&hex=%s', edgeTransaction.signedTx)
+    const url = sprintf(
+      '?module=proxy&action=eth_sendRawTransaction&hex=%s',
+      edgeTransaction.signedTx
+    )
     const jsonObj = await this.fetchGetEtherscan(url)
 
     this.log('broadcastEtherscan jsonObj:', jsonObj)
@@ -1521,7 +1655,7 @@ class EthereumEngine {
       ) {
         result.incrementNonce = true
       } else {
-        throw (jsonObj.error)
+        throw jsonObj.error
       }
       return result
     } else if (typeof jsonObj.result === 'string') {
@@ -1532,18 +1666,22 @@ class EthereumEngine {
     }
   }
 
-  async broadcastBlockCypher (edgeTransaction: EdgeTransaction): Promise<BroadcastResults> {
+  async broadcastBlockCypher (
+    edgeTransaction: EdgeTransaction
+  ): Promise<BroadcastResults> {
     const result: BroadcastResults = {
       incrementNonce: false,
       decrementNonce: false
     }
 
     const transactionParsed = JSON.stringify(edgeTransaction, null, 2)
-    this.log(`Blockcypher: sent transaction to network:\n${transactionParsed}\n`)
+    this.log(
+      `Blockcypher: sent transaction to network:\n${transactionParsed}\n`
+    )
 
     const url = sprintf('v1/eth/main/txs/push')
     const hexTx = edgeTransaction.signedTx.replace('0x', '')
-    const jsonObj = await this.fetchPostBlockcypher(url, {tx: hexTx})
+    const jsonObj = await this.fetchPostBlockcypher(url, { tx: hexTx })
 
     this.log('broadcastBlockCypher jsonObj:', jsonObj)
     if (typeof jsonObj.error !== 'undefined') {
@@ -1561,7 +1699,7 @@ class EthereumEngine {
       ) {
         result.decrementNonce = true
       } else {
-        throw (jsonObj.error)
+        throw jsonObj.error
       }
       return result
     } else if (jsonObj.tx && typeof jsonObj.tx.hash === 'string') {
@@ -1573,7 +1711,9 @@ class EthereumEngine {
   }
 
   // asynchronous
-  async broadcastTx (edgeTransaction: EdgeTransaction): Promise<EdgeTransaction> {
+  async broadcastTx (
+    edgeTransaction: EdgeTransaction
+  ): Promise<EdgeTransaction> {
     const results: Array<BroadcastResults | null> = [null, null]
     const errors: Array<Error | null> = [null, null]
 
@@ -1635,8 +1775,14 @@ class EthereumEngine {
     this.log('broadcastTx results:', results)
 
     if (anyResultDecrementNonce) {
-      this.walletLocalData.nextNonce = bns.add(this.walletLocalData.nextNonce, '-1')
-      this.log('Nonce too high. Decrementing to ' + this.walletLocalData.nextNonce.toString())
+      this.walletLocalData.nextNonce = bns.add(
+        this.walletLocalData.nextNonce,
+        '-1'
+      )
+      this.log(
+        'Nonce too high. Decrementing to ' +
+          this.walletLocalData.nextNonce.toString()
+      )
       // Nonce error. Increment nonce and try again
       const edgeTx = await this.signTx(edgeTransaction)
       const out = await this.broadcastTx(edgeTx)
@@ -1645,23 +1791,38 @@ class EthereumEngine {
 
     if (anyResultIncNonce) {
       // All servers returned a nonce-too-low. Increment and retry sign and broadcast
-      this.walletLocalData.nextNonce = bns.add(this.walletLocalData.nextNonce, '1')
-      this.log('Nonce too low. Incrementing to ' + this.walletLocalData.nextNonce.toString())
+      this.walletLocalData.nextNonce = bns.add(
+        this.walletLocalData.nextNonce,
+        '1'
+      )
+      this.log(
+        'Nonce too low. Incrementing to ' +
+          this.walletLocalData.nextNonce.toString()
+      )
       // Nonce error. Increment nonce and try again
       const edgeTx = await this.signTx(edgeTransaction)
       const out = await this.broadcastTx(edgeTx)
       return out
     }
     // Success
-    this.walletLocalData.nextNonce = bns.add(this.walletLocalData.nextNonce, '1')
+    this.walletLocalData.nextNonce = bns.add(
+      this.walletLocalData.nextNonce,
+      '1'
+    )
 
     return edgeTransaction
   }
 
   // asynchronous
   async saveTx (edgeTransaction: EdgeTransaction) {
-    this.addTransaction(edgeTransaction.currencyCode, edgeTransaction)
+    const { currencyCode, date, txid } = edgeTransaction
+    this.addTransaction(currencyCode, edgeTransaction)
+    this.updateTxids(currencyCode, txid, date, this.walletLocalData.txids)
 
+    this.edgeTxLibCallbacks.onTxidsChanged(
+      currencyCode,
+      this.getTxids(currencyCode)
+    )
     this.edgeTxLibCallbacks.onTransactionsChanged([edgeTransaction])
   }
 
@@ -1684,11 +1845,18 @@ class EthereumEngine {
       walletId: this.walletId.split(' - ')[0],
       walletType: this.walletInfo.type,
       pluginType: this.currencyInfo.pluginName,
-      data: {
-        walletLocalData: this.walletLocalData
-      }
+      data: { walletLocalData: this.walletLocalData }
     }
     return dataDump
+  }
+
+  updateTxids (
+    currencyCode: string,
+    txid: string,
+    timestamp: number,
+    txids: TxidsByCurrencyCode
+  ): void {
+    txids[currencyCode][txid] = timestamp
   }
 }
 

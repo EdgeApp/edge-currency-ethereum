@@ -2,7 +2,8 @@ import babel from 'rollup-plugin-babel'
 const packageJson = require('./package.json')
 
 const babelConf = {
-  presets: ['flow']
+  presets: ['flow'],
+  plugins: ['transform-object-rest-spread']
 }
 
 export default {
