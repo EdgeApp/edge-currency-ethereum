@@ -116,4 +116,4 @@ class ConnectionManager implements ConnectionFetch {
   }
 }
 
-module.exports = { ConnectionManager }
+export { ConnectionManager }

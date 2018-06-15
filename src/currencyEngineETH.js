@@ -31,6 +31,7 @@ import {
   type EthereumFee
 } from './ethTypes.js'
 import { isHex, normalizeAddress, addHexPrefix, bufToHex, validateObject, toHex } from './ethUtils.js'
+import { ConnectionManager } from './ethConnections/connectionManager.js'
 
 const Buffer = require('buffer/').Buffer
 const abi = require('../lib/export-fixes-bundle.js').ABI
@@ -116,6 +117,7 @@ class EthereumEngine {
   timers: any
   walletId: string
   io: EdgeIo
+  connectionManager: ConnectionManager
 
   constructor (io_: any, walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions) {
     // Validate that we are a valid EdgeCurrencyEngine:
@@ -136,6 +138,7 @@ class EthereumEngine {
     this.allTokens = currencyInfo.metaTokens.slice(0)
     this.customTokens = []
     this.timers = {}
+    this.connectionManager = new ConnectionManager(io_)
 
     if (typeof opts.optionalSettings !== 'undefined') {
       this.currentSettings = opts.optionalSettings

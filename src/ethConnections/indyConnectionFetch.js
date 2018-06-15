@@ -62,4 +62,4 @@ class IndyConnectionFetch implements ConnectionFetch {
   }
 }
 
-module.exports = { IndyConnectionFetch }
+export { IndyConnectionFetch }
