@@ -4,7 +4,7 @@
 import type { EdgeCurrencyInfo } from 'edge-core-js'
 import type { EthereumSettings } from './ethTypes'
 
-const otherSettings:EthereumSettings = {
+export const otherSettings: EthereumSettings = {
   etherscanApiServers: [
     'https://api.etherscan.io'
   ],
@@ -14,7 +14,10 @@ const otherSettings:EthereumSettings = {
   superethServers: [
     'https://supereth1.edgesecure.co:8443'
   ],
-  iosAllowedTokens: { 'REP': true, 'WINGS': true, 'HUR': true, 'IND': true }
+  iosAllowedTokens: { 'REP': true, 'WINGS': true, 'HUR': true, 'IND': true },
+  indyApiServers: [
+    'https://52.191.117.55:3000/'
+  ]
 }
 
 const defaultSettings:any = {
