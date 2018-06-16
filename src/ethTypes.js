@@ -13,7 +13,8 @@ export type EthereumSettings = {
   etherscanApiServers: Array<string>,
   blockcypherApiServers: Array<string>,
   superethServers: Array<string>,
-  iosAllowedTokens: {[currencyCode: string]: boolean}
+  iosAllowedTokens: {[currencyCode: string]: boolean},
+  indyApiServers: Array<string>
 }
 
 type EthereumFeesGasLimit = {
@@ -132,4 +133,21 @@ export class WalletLocalData {
       if (typeof data.transactionsObj !== 'undefined') this.transactionsObj = data.transactionsObj
     }
   }
+}
+
+export interface ConnectionFetch {
+  // get the highest block
+  getHighestBlock(): Promise<string>;
+  // get pending txs, can be filtered by an address
+  getPendingTxs(address: string): Promise<[]>;
+  // get an address balance
+  getAddressBalance(address: string): Promise<string>;
+  // get and address balance on a specific token
+  getTokenBalance(address: string, token: string): Promise<string>;
+  // get address txs
+  getAddressTxs(address: string): Promise<[]>;
+  // get address token txs
+  getTokenTxs(address: string, token: string): Promise<[]>;
+  // get txs for a spefic block
+  getBlockTxs(block: string): Promise<[]>;
 }
