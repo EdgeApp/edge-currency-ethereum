@@ -1,5 +1,13 @@
 # edge-currency-ethereum
 
+## 0.10.3
+
+* Update REP contract address
+
+## 0.10.2
+
+* Update icons to use web server versions
+
 ## 0.10.1
 
 * Support the `token_info` prefix inside token URI's.
