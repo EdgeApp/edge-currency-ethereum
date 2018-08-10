@@ -16,7 +16,7 @@ const otherSettings:EthereumSettings = {
   superethServers: [
     'https://supereth1.edgesecure.co:8443'
   ],
-  iosAllowedTokens: { 'REP': true, 'WINGS': true, 'HUR': true, 'IND': true }
+  iosAllowedTokens: { 'REP': true, 'WINGS': true, 'HUR': true, 'IND': true, 'USDT': true }
 }
 
 const defaultSettings:any = {
@@ -78,6 +78,18 @@ export const currencyInfo: EdgeCurrencyInfo = {
       ],
       contractAddress: '0x667088b212ce3d06a1b553a7221E1fD19000d9aF',
       symbolImage: `${imageServerUrl}/wings-logo-color-64.png`
+    },
+    {
+      currencyCode: 'USDT',
+      currencyName: 'Tether',
+      denominations: [
+        {
+          name: 'USDT',
+          multiplier: '1000000'
+        }
+      ],
+      contractAddress: '0xdac17f958d2ee523a2206206994597c13d831ec7',
+      symbolImage: `${imageServerUrl}/usdt-logo-color-64.png`
     },
     {
       currencyCode: 'IND',
