@@ -1,5 +1,10 @@
 # edge-currency-ethereum
 
+## 0.11.0
+
+* Fix unpadAddress for ERC20 contract addresses that start with a 0
+* Add Tether (USDT) support
+
 ## 0.10.3
 
 * Update REP contract address
