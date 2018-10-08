@@ -284,12 +284,13 @@ export const ethereumCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
           return obj.publicAddress
         } else {
           let queryString: string = ''
-
+          const hack: any = obj // EdgeEncodeUri does not have a currencyCode property
           if (typeof obj.nativeAmount === 'string') {
             let currencyCode: string = 'ETH'
-            const nativeAmount:string = obj.nativeAmount
-            if (typeof obj.currencyCode === 'string') {
-              currencyCode = obj.currencyCode
+            const nativeAmount: string = obj.nativeAmount
+
+            if (typeof hack.currencyCode === 'string') {
+              currencyCode = hack.currencyCode
             }
             const denom = getDenomInfo(currencyCode)
             if (!denom) {
@@ -299,12 +300,12 @@ export const ethereumCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
 
             queryString += 'amount=' + amount + '&'
           }
-          if (obj.metadata && (obj.metadata.name || obj.metadata.message)) {
-            if (typeof obj.metadata.name === 'string') {
-              queryString += 'label=' + obj.metadata.name + '&'
+          if (hack.metadata && (hack.metadata.name || hack.metadata.message)) {
+            if (typeof hack.metadata.name === 'string') {
+              queryString += 'label=' + hack.metadata.name + '&'
             }
-            if (typeof obj.metadata.message === 'string') {
-              queryString += 'message=' + obj.metadata.message + '&'
+            if (typeof hack.metadata.message === 'string') {
+              queryString += 'message=' + hack.metadata.message + '&'
             }
           }
           queryString = queryString.substr(0, queryString.length - 1)
