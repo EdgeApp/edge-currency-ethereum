@@ -13,7 +13,7 @@ export type EthereumSettings = {
   etherscanApiServers: Array<string>,
   blockcypherApiServers: Array<string>,
   superethServers: Array<string>,
-  iosAllowedTokens: {[currencyCode: string]: boolean}
+  iosAllowedTokens: { [currencyCode: string]: boolean }
 }
 
 type EthereumFeesGasLimit = {
@@ -35,7 +35,8 @@ export type EthereumFeesGasPrice = {
 }
 
 export type EthereumFee = {
-  gasLimit: EthereumFeesGasLimit, gasPrice?: EthereumFeesGasPrice
+  gasLimit: EthereumFeesGasLimit,
+  gasPrice?: EthereumFeesGasPrice
 }
 
 export type EthereumFees = {
@@ -96,15 +97,15 @@ export class WalletLocalData {
   lastAddressQueryHeight: number
   nextNonce: string
   ethereumAddress: string
-  totalBalances: {[currencyCode: string]: string}
+  totalBalances: { [currencyCode: string]: string }
   enabledTokens: Array<string>
-  transactionsObj: {[currencyCode: string]: Array<EdgeTransaction>}
+  transactionsObj: { [currencyCode: string]: Array<EdgeTransaction> }
   networkFees: EthereumFees
 
   constructor (jsonString: string | null) {
     this.blockHeight = 0
 
-    const totalBalances:{[currencyCode: string]: string} = {}
+    const totalBalances: { [currencyCode: string]: string } = {}
     this.totalBalances = totalBalances
 
     this.nextNonce = '0'
@@ -112,24 +113,40 @@ export class WalletLocalData {
     this.lastAddressQueryHeight = 0
 
     // Dumb extra local var needed to make Flow happy
-    const transactionsObj:{[currencyCode: string]: Array<EdgeTransaction>} = {}
+    const transactionsObj: {
+      [currencyCode: string]: Array<EdgeTransaction>
+    } = {}
     this.transactionsObj = transactionsObj
 
     this.networkFees = defaultNetworkFees
 
     this.ethereumAddress = ''
-    this.enabledTokens = [ PRIMARY_CURRENCY ]
+    this.enabledTokens = [PRIMARY_CURRENCY]
     if (jsonString !== null) {
       const data = JSON.parse(jsonString)
 
-      if (typeof data.blockHeight === 'number') this.blockHeight = data.blockHeight
-      if (typeof data.lastAddressQueryHeight === 'string') this.lastAddressQueryHeight = data.lastAddressQueryHeight
+      if (typeof data.blockHeight === 'number') {
+        this.blockHeight = data.blockHeight
+      }
+      if (typeof data.lastAddressQueryHeight === 'string') {
+        this.lastAddressQueryHeight = data.lastAddressQueryHeight
+      }
       if (typeof data.nextNonce === 'string') this.nextNonce = data.nextNonce
-      if (typeof data.ethereumAddress === 'string') this.ethereumAddress = data.ethereumAddress
-      if (typeof data.totalBalances !== 'undefined') this.totalBalances = data.totalBalances
-      if (typeof data.enabledTokens !== 'undefined') this.enabledTokens = data.enabledTokens
-      if (typeof data.networkFees !== 'undefined') this.networkFees = data.networkFees
-      if (typeof data.transactionsObj !== 'undefined') this.transactionsObj = data.transactionsObj
+      if (typeof data.ethereumAddress === 'string') {
+        this.ethereumAddress = data.ethereumAddress
+      }
+      if (typeof data.totalBalances !== 'undefined') {
+        this.totalBalances = data.totalBalances
+      }
+      if (typeof data.enabledTokens !== 'undefined') {
+        this.enabledTokens = data.enabledTokens
+      }
+      if (typeof data.networkFees !== 'undefined') {
+        this.networkFees = data.networkFees
+      }
+      if (typeof data.transactionsObj !== 'undefined') {
+        this.transactionsObj = data.transactionsObj
+      }
     }
   }
 }

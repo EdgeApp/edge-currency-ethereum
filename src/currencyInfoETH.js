@@ -6,20 +6,14 @@ import type { EthereumSettings } from './ethTypes'
 
 export const imageServerUrl = 'https://developer.airbitz.co/content'
 
-const otherSettings:EthereumSettings = {
-  etherscanApiServers: [
-    'https://api.etherscan.io'
-  ],
-  blockcypherApiServers: [
-    'https://api.blockcypher.com'
-  ],
-  superethServers: [
-    'https://supereth1.edgesecure.co:8443'
-  ],
-  iosAllowedTokens: { 'REP': true, 'WINGS': true, 'HUR': true, 'IND': true, 'USDT': true }
+const otherSettings: EthereumSettings = {
+  etherscanApiServers: ['https://api.etherscan.io'],
+  blockcypherApiServers: ['https://api.blockcypher.com'],
+  superethServers: ['https://supereth1.edgesecure.co:8443'],
+  iosAllowedTokens: { REP: true, WINGS: true, HUR: true, IND: true, USDT: true }
 }
 
-const defaultSettings:any = {
+const defaultSettings: any = {
   customFeeSettings: ['gasLimit', 'gasPrice'],
   otherSettings
 }
@@ -29,9 +23,7 @@ export const currencyInfo: EdgeCurrencyInfo = {
   currencyCode: 'ETH',
   currencyName: 'Ethereum',
   pluginName: 'ethereum',
-  walletTypes: [
-    'wallet:ethereum'
-  ],
+  walletTypes: ['wallet:ethereum'],
 
   defaultSettings,
 
