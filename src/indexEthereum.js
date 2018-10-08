@@ -4,7 +4,11 @@
 // @flow
 import { currencyInfo } from './currencyInfoETH.js'
 import { EthereumEngine } from './currencyEngineETH.js'
-import { DATA_STORE_FILE, DATA_STORE_FOLDER, WalletLocalData } from './ethTypes.js'
+import {
+  DATA_STORE_FILE,
+  DATA_STORE_FOLDER,
+  WalletLocalData
+} from './ethTypes.js'
 import type {
   EdgeCurrencyEngine,
   EdgeCurrencyEngineOptions,
@@ -27,7 +31,7 @@ const EthereumUtil = require('../lib/export-fixes-bundle.js').Util
 
 let io
 
-const randomBuffer = (size) => {
+const randomBuffer = size => {
   const array = io.random(size)
   return Buffer.from(array)
 }
@@ -87,7 +91,7 @@ export const ethereumCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
     io = opts.io
 
     console.log(`Creating Currency Plugin for ethereum`)
-    const ethereumPlugin:EdgeCurrencyPlugin = {
+    const ethereumPlugin: EdgeCurrencyPlugin = {
       pluginName: 'ethereum',
       currencyInfo,
 
@@ -136,35 +140,41 @@ export const ethereumCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
           const ethereumPublicAddress = wallet.getAddressString()
           // const ethereumKey = '0x389b07b3466eed587d6bdae09a3613611de9add2635432d6cd1521af7bbc3757'
           // const ethereumPublicAddress = '0x9fa817e5A48DD1adcA7BEc59aa6E3B1F5C4BeA9a'
-          return {ethereumKey, ethereumPublicAddress}
+          return { ethereumKey, ethereumPublicAddress }
         } else {
           return null
         }
       },
 
-      async makeEngine (walletInfo: EdgeWalletInfo, opts: EdgeCurrencyEngineOptions): Promise<EdgeCurrencyEngine> {
+      async makeEngine (
+        walletInfo: EdgeWalletInfo,
+        opts: EdgeCurrencyEngineOptions
+      ): Promise<EdgeCurrencyEngine> {
         const ethereumEngine = new EthereumEngine(io, walletInfo, opts)
         try {
-          const result =
-            await ethereumEngine.walletLocalFolder
-              .folder(DATA_STORE_FOLDER)
-              .file(DATA_STORE_FILE)
-              .getText(DATA_STORE_FOLDER, 'walletLocalData')
+          const result = await ethereumEngine.walletLocalFolder
+            .folder(DATA_STORE_FOLDER)
+            .file(DATA_STORE_FILE)
+            .getText(DATA_STORE_FOLDER, 'walletLocalData')
 
           ethereumEngine.walletLocalData = new WalletLocalData(result)
-          ethereumEngine.walletLocalData.ethereumAddress = ethereumEngine.walletInfo.keys.ethereumAddress
+          ethereumEngine.walletLocalData.ethereumAddress =
+            ethereumEngine.walletInfo.keys.ethereumAddress
         } catch (err) {
           try {
             console.log(err)
             console.log('No walletLocalData setup yet: Failure is ok')
             ethereumEngine.walletLocalData = new WalletLocalData(null)
-            ethereumEngine.walletLocalData.ethereumAddress = ethereumEngine.walletInfo.keys.ethereumAddress
+            ethereumEngine.walletLocalData.ethereumAddress =
+              ethereumEngine.walletInfo.keys.ethereumAddress
             await ethereumEngine.walletLocalFolder
               .folder(DATA_STORE_FOLDER)
               .file(DATA_STORE_FILE)
               .setText(JSON.stringify(ethereumEngine.walletLocalData))
           } catch (e) {
-            console.log('Error writing to localDataStore. Engine not started:' + err)
+            console.log(
+              'Error writing to localDataStore. Engine not started:' + err
+            )
           }
         }
         for (const token of ethereumEngine.walletLocalData.enabledTokens) {
@@ -250,7 +260,7 @@ export const ethereumCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
         const label = getParameterByName('label', uri)
         const message = getParameterByName('message', uri)
 
-        const edgeParsedUri:EdgeParsedUri = {
+        const edgeParsedUri: EdgeParsedUri = {
           publicAddress: address
         }
         if (nativeAmount) {
@@ -284,12 +294,13 @@ export const ethereumCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
           return obj.publicAddress
         } else {
           let queryString: string = ''
-
+          const hack: any = obj // EdgeEncodeUri does not have a currencyCode property
           if (typeof obj.nativeAmount === 'string') {
             let currencyCode: string = 'ETH'
-            const nativeAmount:string = obj.nativeAmount
-            if (typeof obj.currencyCode === 'string') {
-              currencyCode = obj.currencyCode
+            const nativeAmount: string = obj.nativeAmount
+
+            if (typeof hack.currencyCode === 'string') {
+              currencyCode = hack.currencyCode
             }
             const denom = getDenomInfo(currencyCode)
             if (!denom) {
@@ -299,12 +310,12 @@ export const ethereumCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
 
             queryString += 'amount=' + amount + '&'
           }
-          if (obj.metadata && (obj.metadata.name || obj.metadata.message)) {
-            if (typeof obj.metadata.name === 'string') {
-              queryString += 'label=' + obj.metadata.name + '&'
+          if (hack.metadata && (hack.metadata.name || hack.metadata.message)) {
+            if (typeof hack.metadata.name === 'string') {
+              queryString += 'label=' + hack.metadata.name + '&'
             }
-            if (typeof obj.metadata.message === 'string') {
-              queryString += 'message=' + obj.metadata.message + '&'
+            if (typeof hack.metadata.message === 'string') {
+              queryString += 'message=' + hack.metadata.message + '&'
             }
           }
           queryString = queryString.substr(0, queryString.length - 1)
@@ -324,7 +335,10 @@ export const ethereumCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
       const metaTokens = []
       for (const metaToken of ethereumPlugin.currencyInfo.metaTokens) {
         const currencyCode = metaToken.currencyCode
-        if (ethereumPlugin.currencyInfo.defaultSettings.otherSettings.iosAllowedTokens[currencyCode] === true) {
+        if (
+          ethereumPlugin.currencyInfo.defaultSettings.otherSettings
+            .iosAllowedTokens[currencyCode] === true
+        ) {
           metaTokens.push(metaToken)
         }
       }
