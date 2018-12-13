@@ -331,20 +331,6 @@ export const ethereumCurrencyPluginFactory: EdgeCurrencyPluginFactory = {
       }
     }
 
-    if (global.OS && global.OS === 'ios') {
-      const metaTokens = []
-      for (const metaToken of ethereumPlugin.currencyInfo.metaTokens) {
-        const currencyCode = metaToken.currencyCode
-        if (
-          ethereumPlugin.currencyInfo.defaultSettings.otherSettings
-            .iosAllowedTokens[currencyCode] === true
-        ) {
-          metaTokens.push(metaToken)
-        }
-      }
-      ethereumPlugin.currencyInfo.metaTokens = metaTokens
-    }
-
     async function initPlugin (opts: any) {
       // Try to grab currencyInfo from disk. If that fails, use defaults
 

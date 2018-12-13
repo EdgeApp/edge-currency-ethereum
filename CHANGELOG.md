@@ -1,5 +1,14 @@
 # edge-currency-ethereum
 
+## 0.11.2
+
+* Add DAI as default token
+* Remove iOS specific token filter
+
+## 0.11.1
+
+* Use new colored icons
+
 ## 0.11.0
 
 * Fix unpadAddress for ERC20 contract addresses that start with a 0
