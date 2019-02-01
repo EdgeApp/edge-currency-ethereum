@@ -117,6 +117,18 @@ export const currencyInfo: EdgeCurrencyInfo = {
       ],
       contractAddress: '0xCDB7eCFd3403Eef3882c65B761ef9B5054890a47',
       symbolImage: `${imageServerUrl}/hur-logo-solo-64.png`
+    },
+    {
+      currencyCode: 'HERC',
+      currencyName: 'Hercules',
+      denominations: [
+        {
+          name: 'HERC',
+          multiplier: '1000000000000000000'
+        }
+      ],
+      contractAddress: '0x6251583e7d997df3604bc73b9779196e94a090ce',
+      symbolImage: `${imageServerUrl}/hur-logo-solo-64.png`
     }
   ]
 }
