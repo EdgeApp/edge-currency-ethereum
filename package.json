@@ -1,6 +1,6 @@
 {
   "name": "edge-currency-ethereum",
-  "version": "0.11.1",
+  "version": "0.11.3",
   "description": "Edge Ethereum currency plugin",
   "homepage": "https://edgesecure.co/",
   "license": "SEE LICENSE IN LICENSE",
@@ -44,7 +44,7 @@
     "ethereumjs-abi": "^0.6.4",
     "ethereumjs-tx": "^1.3.3",
     "ethereumjs-util": "^5.1.2",
-    "ethereumjs-wallet": "git://github.com/Airbitz/ethereumjs-wallet.git#6157e11ea10a734fbe55f4c7ea542780975b60ef",
+    "ethereumjs-wallet": "https://github.com/Airbitz/ethereumjs-wallet.git#6157e11ea10a734fbe55f4c7ea542780975b60ef",
     "jsonschema": "^1.1.1",
     "sprintf-js": "^1.1.1",
     "uri-js": "^3.0.2"
